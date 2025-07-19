@@ -33,16 +33,6 @@ xrdb \$HOME/.Xresources
 # Set a basic window manager background
 xsetroot -solid grey
 
-# Initialize session management properly
-export XDG_SESSION_TYPE=x11
-export XDG_SESSION_CLASS=user
-export XDG_SESSION_DESKTOP=LXDE
-
-# Start D-Bus session if not already running
-if [ -z "\$DBUS_SESSION_BUS_ADDRESS" ]; then
-    eval \$(dbus-launch --sh-syntax --exit-with-session)
-fi
-
 # Start LXDE session - try multiple approaches
 if command -v startlxde >/dev/null 2>&1; then
     echo "Starting LXDE with startlxde"
