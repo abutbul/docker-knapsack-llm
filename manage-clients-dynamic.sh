@@ -112,7 +112,7 @@ function start_instances() {
         local api_port=$((BASE_API_PORT + i - 1))
         
         # Check if container already exists and is running
-        if docker ps -q -f name="^${container_name}$" >/dev/null 2>&1; then
+        if [ -n "$(docker ps -q -f name="^${container_name}$" 2>/dev/null)" ]; then
             echo "  Instance $i: Already running on VNC=$vnc_port, API=$api_port"
             continue
         fi

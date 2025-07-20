@@ -3,6 +3,11 @@ import pyautogui
 import time
 import os
 
+# Disable PyAutoGUI fail-safe for Docker container usage
+# The fail-safe is designed to prevent runaway automation on desktops
+# but is counterproductive in a controlled container environment
+pyautogui.FAILSAFE = False
+
 app = Flask(__name__)
 
 # Configuration for desktop snapshots
@@ -10,22 +15,28 @@ SNAPSHOT_PATH = os.environ.get('SNAPSHOT_PATH', '/tmp/desktop_snapshot.png')
 
 @app.route('/send-key', methods=['POST'])
 def send_key():
-    data = request.json
-    key = data.get('key')
-    if not key:
-        return jsonify({'error': 'Key is required'}), 400
-    pyautogui.press(key)
-    return jsonify({'status': 'success', 'key': key})
+    try:
+        data = request.json
+        key = data.get('key')
+        if not key:
+            return jsonify({'error': 'Key is required'}), 400
+        pyautogui.press(key)
+        return jsonify({'status': 'success', 'key': key})
+    except Exception as e:
+        return jsonify({'error': f'Failed to send key: {str(e)}'}), 500
 
 @app.route('/move-mouse', methods=['POST'])
 def move_mouse():
-    data = request.json
-    x = data.get('x')
-    y = data.get('y')
-    if x is None or y is None:
-        return jsonify({'error': 'x and y are required'}), 400
-    pyautogui.moveTo(x, y)
-    return jsonify({'status': 'success', 'x': x, 'y': y})
+    try:
+        data = request.json
+        x = data.get('x')
+        y = data.get('y')
+        if x is None or y is None:
+            return jsonify({'error': 'x and y are required'}), 400
+        pyautogui.moveTo(x, y)
+        return jsonify({'status': 'success', 'x': x, 'y': y})
+    except Exception as e:
+        return jsonify({'error': f'Failed to move mouse: {str(e)}'}), 500
 
 @app.route('/desktop-snapshot', methods=['GET'])
 def get_desktop_snapshot():
