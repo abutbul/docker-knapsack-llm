@@ -4,8 +4,15 @@ def test_vnc_connection(host="localhost", port=5900):
     print(f"Testing VNC connection to {host}:{port}...")
     try:
         with socket.create_connection((host, port), timeout=5) as sock:
-            print("VNC server is running and accessible.")
-            return True
+            # Receive the initial data from the VNC server (version string)
+            response = sock.recv(1024).decode("utf-8", errors="ignore")
+            print(f"Received: {response.strip()}")
+            if "RFB" in response:
+                print("VNC server is running and accessible.")
+                return True
+            else:
+                print("Connected but did not receive expected VNC protocol string.")
+                return False
     except (socket.timeout, ConnectionRefusedError) as e:
         print(f"Failed to connect to VNC server: {e}")
         return False
