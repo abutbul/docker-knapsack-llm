@@ -32,7 +32,10 @@ RUN apt-get update && \
     wget \
     gnupg \
     software-properties-common \
-    curl)
+    curl \
+    imagemagick \
+    bc \
+    x11-apps)
 
 RUN apt-get clean && rm -rf /var/lib/apt/lists/*
 
@@ -77,7 +80,9 @@ COPY wow-wotlk.yml /root/.config/lutris/games/wow-wotlk.yml
 # Copy overlay setup script and wine initialization
 COPY setup-overlay.sh /opt/setup-overlay.sh
 COPY init-wine.sh /opt/init-wine.sh
-RUN chmod +x /opt/setup-overlay.sh /opt/init-wine.sh
+COPY health_check.sh /opt/health_check.sh
+COPY snapshot-service.sh /opt/snapshot-service.sh
+RUN chmod +x /opt/setup-overlay.sh /opt/init-wine.sh /opt/health_check.sh /opt/snapshot-service.sh
 
 # Copy API script and entrypoint
 COPY api.py /opt/api.py

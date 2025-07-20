@@ -76,6 +76,10 @@ else
     echo "WoW client detected in /root/Desktop/Client/"
 fi
 
+# Start desktop snapshot service in background
+echo "Starting desktop snapshot service..."
+/opt/snapshot-service.sh &
+
 echo "Starting TigerVNC server..."
 # Don't use Xvfb, let TigerVNC create its own X server
 VNC_GEOMETRY=${VNC_GEOMETRY:-1024x768}
