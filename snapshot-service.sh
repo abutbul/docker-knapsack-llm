@@ -33,7 +33,7 @@ while true; do
     TEMP_PATH="${SNAPSHOT_PATH}.tmp"
     
     # Capture desktop using xwd + ImageMagick convert
-    if DISPLAY="$DISPLAY" xwd -root | convert xwd:- png:"$TEMP_PATH" 2>/dev/null; then
+    if DISPLAY="$DISPLAY" xwd -silent -root | convert xwd:- png:"$TEMP_PATH" 2>/dev/null; then
         # Atomic move to final location
         mv "$TEMP_PATH" "$SNAPSHOT_PATH"
     else
