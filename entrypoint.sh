@@ -12,10 +12,14 @@ mkdir -p /tmp/.X11-unix
 touch /root/.Xresources
 [ -f /root/.Xauthority ] || touch /root/.Xauthority
 
-# Initialize D-Bus
+# Initialize D-Bus system service (but not session bus yet - that's handled in xstartup)
 mkdir -p /var/run/dbus
 rm -f /var/run/dbus/pid /run/dbus/pid 2>/dev/null || true
 dbus-daemon --system --fork || true
+
+# Create LXDE config directories early to prevent session issues
+mkdir -p /root/.config/lxsession/LXDE
+mkdir -p /root/.cache/lxsession/LXDE
 
 # Set VNC password
 VNC_PASSWD=${VNC_PASSWD:-password}
@@ -25,8 +29,13 @@ chmod 600 /root/.vnc/passwd
 # Create xstartup script for LXDE
 cat > /root/.vnc/xstartup <<EOF
 #!/bin/bash
+# Fix for "No session for pid" error - properly configure session environment
 unset SESSION_MANAGER
 unset DBUS_SESSION_BUS_ADDRESS
+
+# Start a new D-Bus session for this VNC session
+export \$(dbus-launch)
+export DBUS_SESSION_BUS_ADDRESS
 
 # Load X resources
 xrdb \$HOME/.Xresources
@@ -34,16 +43,44 @@ xrdb \$HOME/.Xresources
 # Set a basic window manager background
 xsetroot -solid grey
 
-# Start LXDE session - try multiple approaches
+# Fix polkit issues by creating a minimal polkit configuration
+mkdir -p /root/.config/lxsession/LXDE
+cat > /root/.config/lxsession/LXDE/desktop.conf <<LXCONF
+[Session]
+window_manager=openbox-lxde
+windows_manager/command=openbox
+windows_manager/session=LXDE
+disable_autostart=no
+polkit/command=
+laptop_mode=no
+
+[GTK]
+sNet/ThemeName=Clearlooks
+sNet/IconThemeName=nuoveXT2
+sGtk/FontName=Sans 10
+iGtk/ToolbarStyle=3
+iGtk/ButtonImages=1
+iGtk/MenuImages=1
+iGtk/CursorThemeSize=18
+iXft/Antialias=1
+iXft/Hinting=1
+iXft/HintStyle=hintslight
+iXft/RGBA=rgb
+LXCONF
+
+# Start LXDE session with proper error handling
 if command -v startlxde >/dev/null 2>&1; then
     echo "Starting LXDE with startlxde"
     exec startlxde
 elif command -v lxsession >/dev/null 2>&1; then
-    echo "Starting LXDE with lxsession"
-    exec lxsession -s LXDE -e LXDE
+    echo "Starting LXDE with lxsession (no polkit)"
+    # Start lxsession without polkit to avoid session errors
+    exec lxsession -s LXDE -e LXDE -a
 else
     echo "LXDE not found, starting basic X session"
-    # Fallback to basic X session
+    # Fallback to openbox + lxpanel for minimal LXDE-like experience
+    openbox &
+    lxpanel &
     exec xterm
 fi
 EOF
@@ -82,10 +119,14 @@ echo "Starting desktop snapshot service..."
 
 echo "Starting TigerVNC server..."
 # Don't use Xvfb, let TigerVNC create its own X server
-VNC_GEOMETRY=${VNC_GEOMETRY:-1024x768}
-VNC_DEPTH=${VNC_DEPTH:-16}
+VNC_GEOMETRY=${VNC_GEOMETRY:-1280x800}
+VNC_DEPTH=${VNC_DEPTH:-24}
 
-# Start VNC server with more verbose output and better error handling
+# Kill any existing VNC servers on display :0
+vncserver -kill :0 2>/dev/null || true
+sleep 2
+
+# Start VNC server with better configuration for LXDE
 tigervncserver :0 \
     -geometry $VNC_GEOMETRY \
     -depth $VNC_DEPTH \
