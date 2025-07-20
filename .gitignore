@@ -1,2 +1,4 @@
 wow-client/
 test_snapshot.png
+docker-compose.yml
+docker-compose.generated.yml

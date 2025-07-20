@@ -1,0 +1,33 @@
+version: '3.8'
+
+services:
+  wow-client:
+    build: .
+    image: wow-client:latest
+    volumes:
+      # Read-only client files shared across all instances
+      - ./wow-client:/mnt/wow-client:ro
+      # Writable overlay for saves, configs, etc. (each instance gets its own)
+      - wow-client-${INSTANCE_ID}-data:/root/Desktop/Client
+      # Lutris and Wine data persistence
+      - wow-client-${INSTANCE_ID}-lutris:/root/.local/share/lutris
+      - wow-client-${INSTANCE_ID}-wine:/root/.wine
+    environment:
+      - INSTANCE_ID=${INSTANCE_ID}
+      - VNC_PASSWD=${VNC_PASSWD:-password}
+      - VNC_GEOMETRY=${VNC_GEOMETRY:-1280x800}
+      - VNC_DEPTH=${VNC_DEPTH:-24}
+      - SNAPSHOT_PATH=/tmp/desktop_snapshot.png
+      - SNAPSHOT_INTERVAL_MS=${SNAPSHOT_INTERVAL_MS:-500}
+    tmpfs:
+      - /tmp
+    restart: unless-stopped
+    networks:
+      - wow-network
+    ports:
+      - "${VNC_PORT}:5900"  # VNC
+      - "${API_PORT}:5000"  # API
+
+networks:
+  wow-network:
+    driver: bridge

@@ -7,27 +7,30 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
 
 function show_usage() {
-    echo "Usage: $0 [start|stop|status|setup] [number_of_instances]"
+    echo "Usage: $0 [start|stop|status|setup|clean-volumes|clean-stopped|clean-all] [number_of_instances|instance_numbers]"
     echo ""
     echo "Commands:"
-    echo "  start <N>  - Start N instances of WoW clients (1-5)"
-    echo "  stop       - Stop all running WoW client instances"
-    echo "  status     - Show status of all instances"
-    echo "  setup <N>  - Create shared wow-client directory"
+    echo "  start <N>         - Start N instances of WoW clients (unlimited)"
+    echo "  stop              - Stop all running WoW client instances"
+    echo "  status            - Show status of all instances"
+    echo "  setup             - Create shared wow-client directory"
+    echo "  clean-volumes [N] - Clean volumes for specific instance(s) or all if no number given"
+    echo "  clean-stopped     - Clean volumes only for stopped/non-existent containers"
+    echo "  clean-all         - Clean all containers, volumes, and networks (DESTRUCTIVE)"
     echo ""
     echo "Examples:"
-    echo "  $0 setup 3     # Create shared client directory"
-    echo "  $0 start 1     # Start only the first instance"
-    echo "  $0 start 3     # Start 3 instances"
-    echo "  $0 stop        # Stop all instances"
-    echo "  $0 status      # Show running instances"
+    echo "  $0 setup           # Create shared client directory"
+    echo "  $0 start 1         # Start only 1 instance"
+    echo "  $0 start 10        # Start 10 instances"
+    echo "  $0 stop            # Stop all instances"
+    echo "  $0 status          # Show running instances"
+    echo "  $0 clean-volumes 3 # Clean volumes for instance 3 only"
+    echo "  $0 clean-volumes   # Clean ALL volumes (WARNING: removes all data)"
+    echo "  $0 clean-stopped   # Clean volumes for stopped containers only"
+    echo "  $0 clean-all       # Nuclear option - clean everything"
     echo ""
-    echo "Port mapping:"
-    echo "  Instance 1: VNC=5900, API=5000"
-    echo "  Instance 2: VNC=5901, API=5001"
-    echo "  Instance 3: VNC=5902, API=5002"
-    echo "  Instance 4: VNC=5903, API=5003"
-    echo "  Instance 5: VNC=5904, API=5004"
+    echo "Port mapping (dynamic):"
+    echo "  Instance N: VNC=localhost:$((5899 + N)), API=localhost:$((4999 + N))"
     echo ""
     echo "Shared Client Files:"
     echo "  All instances share read-only client files from ./wow-client"
@@ -35,13 +38,6 @@ function show_usage() {
 }
 
 function setup_directories() {
-    local num_instances=$1
-    
-    if [[ ! "$num_instances" =~ ^[1-5]$ ]]; then
-        echo "Error: Number of instances must be between 1 and 5"
-        exit 1
-    fi
-    
     echo "Setting up shared WoW client directory..."
     
     # Create the single shared client directory
@@ -59,35 +55,35 @@ function setup_directories() {
     echo ""
     echo "Setup complete! Now you can:"
     echo "1. Copy your WoW client files to the wow-client directory"
-    echo "2. Run: $0 start $num_instances"
+    echo "2. Run: $0 start <number_of_instances>"
     echo ""
     echo "Benefits of this approach:"
     echo "- Single copy of client files (saves disk space)"
     echo "- Each instance has isolated saves and configurations"
     echo "- Easy updates: just update the wow-client directory"
+    echo "- Dynamic scaling to any number of instances"
 }
 
 function start_instances() {
     local num_instances=$1
     
-    if [[ ! "$num_instances" =~ ^[1-5]$ ]]; then
-        echo "Error: Number of instances must be between 1 and 5"
+    if [[ ! "$num_instances" =~ ^[1-9][0-9]*$ ]]; then
+        echo "Error: Number of instances must be a positive integer"
         exit 1
     fi
     
     echo "Starting $num_instances WoW client instance(s)..."
     
+    # Generate dynamic docker-compose file
+    echo "Generating docker-compose configuration for $num_instances instances..."
+    ./generate-compose.sh "$num_instances" "docker-compose.generated.yml"
+    
     # Build the image first
     echo "Building Docker image..."
-    docker-compose build
+    docker-compose -f docker-compose.generated.yml build
     
-    if [ "$num_instances" -eq 1 ]; then
-        # Start only the first instance
-        docker-compose up -d wow-client-1
-    else
-        # Start multiple instances using profiles
-        docker-compose --profile multi up -d $(seq -f "wow-client-%.0f" 1 $num_instances | tr '\n' ' ')
-    fi
+    # Start all instances
+    docker-compose -f docker-compose.generated.yml up -d
     
     echo ""
     echo "Instances started! Access them via:"
@@ -100,7 +96,14 @@ function start_instances() {
 
 function stop_instances() {
     echo "Stopping all WoW client instances..."
-    docker-compose --profile multi down
+    
+    # Use the generated compose file if it exists, otherwise try the original
+    if [ -f "docker-compose.generated.yml" ]; then
+        docker-compose -f docker-compose.generated.yml down
+    else
+        docker-compose --profile multi down
+    fi
+    
     echo "All instances stopped."
 }
 
@@ -108,7 +111,7 @@ function show_status() {
     echo "WoW Client Instance Status:"
     echo "=========================="
     
-    for i in {1..5}; do
+    for i in {1..20}; do
         local container_name="wow-client-$i"
         local status=$(docker ps --filter "name=$container_name" --format "{{.Status}}" 2>/dev/null)
         
@@ -118,7 +121,7 @@ function show_status() {
             echo "  Instance $i: RUNNING ($status)"
             echo "    VNC: localhost:$vnc_port"
             echo "    API: localhost:$api_port"
-        else
+        elif docker ps -a --filter "name=$container_name" --format "{{.Names}}" | grep -q "^$container_name$"; then
             echo "  Instance $i: STOPPED"
         fi
     done
@@ -128,15 +131,162 @@ function show_status() {
     docker ps --filter "name=wow-client" --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
 }
 
+function clean_volumes() {
+    local instance_num=$1
+    local project_prefix=$(basename "$(pwd)")
+    
+    if [ -n "$instance_num" ]; then
+        # Clean specific instance
+        if [[ ! "$instance_num" =~ ^[1-9][0-9]*$ ]]; then
+            echo "Error: Instance number must be a positive integer"
+            exit 1
+        fi
+        
+        echo "Cleaning volumes for instance $instance_num..."
+        
+        # Check if container is running
+        if docker ps -q --filter "name=wow-client-$instance_num" | grep -q .; then
+            echo "Error: Instance $instance_num is still running. Stop it first with: $0 stop"
+            exit 1
+        fi
+        
+        # Remove container if it exists (stopped)
+        docker rm "wow-client-$instance_num" 2>/dev/null || true
+        
+        # Remove specific volumes
+        local volumes=(
+            "${project_prefix}_wow-client-${instance_num}-data"
+            "${project_prefix}_wow-client-${instance_num}-lutris"
+            "${project_prefix}_wow-client-${instance_num}-wine"
+        )
+        
+        for volume in "${volumes[@]}"; do
+            if docker volume ls -q --filter "name=$volume" | grep -q "^$volume$"; then
+                echo "  Removing volume: $volume"
+                docker volume rm "$volume"
+            else
+                echo "  Volume not found: $volume"
+            fi
+        done
+        
+        echo "Volumes for instance $instance_num cleaned."
+    else
+        # Clean all volumes
+        echo "WARNING: This will remove ALL WoW client data including saves and configurations!"
+        echo "Make sure all instances are stopped first."
+        echo ""
+        read -p "Are you sure you want to continue? (y/N): " -n 1 -r
+        echo
+        if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+            echo "Operation cancelled."
+            return
+        fi
+        
+        # Stop all containers first
+        echo "Stopping all WoW client instances..."
+        stop_instances
+        
+        echo "Removing all containers..."
+        docker ps -a --filter "name=wow-client-" -q | xargs -r docker rm
+        
+        echo "Removing all volumes..."
+        # Remove all volumes matching our pattern
+        docker volume ls -q --filter "name=${project_prefix}_wow-client-" | xargs -r docker volume rm
+        
+        echo "All volumes cleaned."
+    fi
+}
+
+function clean_stopped() {
+    echo "Cleaning volumes for stopped containers only..."
+    local project_prefix=$(basename "$(pwd)")
+    
+    # Get all containers (running and stopped) with our naming pattern
+    local all_containers=$(docker ps -a --filter "name=wow-client-" --format "{{.Names}}")
+    local running_containers=$(docker ps --filter "name=wow-client-" --format "{{.Names}}")
+    
+    if [ -z "$all_containers" ]; then
+        echo "No WoW client containers found."
+        return
+    fi
+    
+    # Find stopped containers
+    local stopped_containers=""
+    for container in $all_containers; do
+        if ! echo "$running_containers" | grep -q "^$container$"; then
+            stopped_containers="$stopped_containers $container"
+        fi
+    done
+    
+    if [ -z "$stopped_containers" ]; then
+        echo "No stopped containers found."
+        return
+    fi
+    
+    echo "Found stopped containers:$stopped_containers"
+    
+    for container in $stopped_containers; do
+        # Extract instance number
+        local instance_num=$(echo "$container" | sed 's/wow-client-//')
+        
+        echo "Cleaning volumes for stopped instance $instance_num..."
+        
+        # Remove the stopped container
+        docker rm "$container" 2>/dev/null || true
+        
+        # Remove volumes for this instance
+        local volumes=(
+            "${project_prefix}_wow-client-${instance_num}-data"
+            "${project_prefix}_wow-client-${instance_num}-lutris"
+            "${project_prefix}_wow-client-${instance_num}-wine"
+        )
+        
+        for volume in "${volumes[@]}"; do
+            if docker volume ls -q --filter "name=$volume" | grep -q "^$volume$"; then
+                echo "  Removing volume: $volume"
+                docker volume rm "$volume"
+            fi
+        done
+    done
+    
+    echo "Stopped container volumes cleaned."
+}
+
+function clean_all() {
+    echo "WARNING: This will remove ALL WoW client containers, volumes, and networks!"
+    echo "This is a destructive operation that cannot be undone."
+    echo ""
+    read -p "Are you sure you want to continue? (y/N): " -n 1 -r
+    echo
+    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+        echo "Operation cancelled."
+        return
+    fi
+    
+    local project_prefix=$(basename "$(pwd)")
+    
+    echo "Stopping all WoW client instances..."
+    stop_instances
+    
+    echo "Removing all containers..."
+    docker ps -a --filter "name=wow-client-" -q | xargs -r docker rm -f
+    
+    echo "Removing all volumes..."
+    docker volume ls -q --filter "name=${project_prefix}_wow-client-" | xargs -r docker volume rm
+    
+    echo "Removing networks..."
+    docker network ls --filter "name=wow-network" -q | xargs -r docker network rm 2>/dev/null || true
+    
+    echo "Cleaning up unused Docker resources..."
+    docker system prune -f
+    
+    echo "Complete cleanup finished."
+}
+
 # Main script logic
 case "$1" in
     "setup")
-        if [ -z "$2" ]; then
-            echo "Error: Please specify number of instances to setup"
-            show_usage
-            exit 1
-        fi
-        setup_directories "$2"
+        setup_directories
         ;;
     "start")
         if [ -z "$2" ]; then
@@ -151,6 +301,15 @@ case "$1" in
         ;;
     "status")
         show_status
+        ;;
+    "clean-volumes")
+        clean_volumes "$2"
+        ;;
+    "clean-stopped")
+        clean_stopped
+        ;;
+    "clean-all")
+        clean_all
         ;;
     *)
         show_usage

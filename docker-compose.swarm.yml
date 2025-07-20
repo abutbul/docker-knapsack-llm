@@ -1,0 +1,43 @@
+version: '3.8'
+
+services:
+  wow-client:
+    image: wow-client:latest
+    deploy:
+      replicas: 1  # This will be overridden by scaling commands
+      placement:
+        constraints:
+          - node.role == manager
+      resources:
+        limits:
+          memory: 2G
+        reservations:
+          memory: 1G
+    volumes:
+      # Read-only client files shared across all instances
+      - ./wow-client:/mnt/wow-client:ro
+      # For swarm mode, we'll use a different approach for persistence
+    environment:
+      - VNC_PASSWD=${VNC_PASSWD:-password}
+      - VNC_GEOMETRY=${VNC_GEOMETRY:-1280x800}
+      - VNC_DEPTH=${VNC_DEPTH:-24}
+      - SNAPSHOT_PATH=/tmp/desktop_snapshot.png
+      - SNAPSHOT_INTERVAL_MS=${SNAPSHOT_INTERVAL_MS:-500}
+    tmpfs:
+      - /tmp
+    networks:
+      - wow-network
+    ports:
+      - target: 5900
+        published: 5900-5950  # Port range for VNC
+        protocol: tcp
+        mode: host
+      - target: 5000
+        published: 5000-5050  # Port range for API
+        protocol: tcp
+        mode: host
+
+networks:
+  wow-network:
+    driver: overlay
+    attachable: true
