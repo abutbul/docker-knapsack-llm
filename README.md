@@ -74,27 +74,6 @@ docker stop lxde-wine-container
 docker rm lxde-wine-container
 ```
 
-## Troubleshooting
-
-### 1. X Server Already Running
-If you see an error like:
-```
-A VNC/X11 server is already running as :99 on machine <container_id>
-```
-This means a stale `.X99-lock` file exists. The Dockerfile has been updated to automatically remove this file before starting the X server.
-
-### 2. Missing `.Xauthority` File
-If you see an error like:
-```
-FileNotFoundError: [Errno 2] No such file or directory: '/root/.Xauthority'
-```
-The Dockerfile now ensures the `.Xauthority` file is created and configured for the X server.
-
-Rebuild the Docker image and restart the container to apply these fixes:
-```bash
-docker build -t lxde-wine-api .
-docker run -d --name lxde-wine-container -p 5000:5000 -p 5900:5900 lxde-wine-api
-```
 
 ## Multi-Instance WoW WotLK Setup
 
@@ -108,21 +87,12 @@ First, create directories for your WoW client instances:
 ./manage-clients.sh setup 3  # Creates 3 instance directories
 ```
 
-#### 2. Copy WoW Client Files
-Copy your WoW WotLK client files to each instance directory:
-```bash
-# Copy your WoW client to each instance
-cp -r /path/to/your/wow/client/* ./wow-client-1/
-cp -r /path/to/your/wow/client/* ./wow-client-2/
-cp -r /path/to/your/wow/client/* ./wow-client-3/
-```
-
-#### 3. Start Instances
+#### 2. Start Instances
 ```bash
 ./manage-clients.sh start 3  # Starts 3 instances
 ```
 
-#### 4. Connect via VNC
+#### 3. Connect via VNC
 Each instance will be available on different ports:
 - Instance 1: VNC on `localhost:5900`, API on `localhost:5000`
 - Instance 2: VNC on `localhost:5901`, API on `localhost:5001`
@@ -186,7 +156,6 @@ docker-player/
 ├── wow-wotlk.yml          # Lutris configuration for WoW
 ├── api.py                 # API server
 ├── manage-clients.sh      # Instance management script
-├── wow-client-1/          # Instance 1 WoW client files
-├── wow-client-2/          # Instance 2 WoW client files
+├── wow-client/          # shared WoW client files
 └── ...
 ```
