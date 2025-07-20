@@ -14,6 +14,7 @@ touch /root/.Xresources
 
 # Initialize D-Bus
 mkdir -p /var/run/dbus
+rm -f /var/run/dbus/pid /run/dbus/pid 2>/dev/null || true
 dbus-daemon --system --fork || true
 
 # Set VNC password
@@ -47,6 +48,29 @@ else
 fi
 EOF
 chmod +x /root/.vnc/xstartup
+
+# Initialize Lutris configuration if needed
+mkdir -p /root/.local/share/lutris
+mkdir -p /root/.config/lutris
+
+# Set up overlay filesystem for WoW client files
+echo "Setting up overlay filesystem..."
+/opt/setup-overlay.sh
+
+# Set Wine and OpenGL environment variables
+export WINEARCH=win64
+export WINEPREFIX=/root/.wine
+export __GL_SHADER_DISK_CACHE=1
+export __GL_SHADER_DISK_CACHE_PATH=/root/Desktop/Client
+
+# Check WoW client existence after overlay setup
+if [ ! -f "/root/Desktop/Client/Wow.exe" ]; then
+    echo "WARNING: World of Warcraft client not found in /root/Desktop/Client/"
+    echo "Please make sure your WoW client files are in the ./wow-client directory"
+    echo "The container will continue to run, but WoW may not launch properly"
+else
+    echo "WoW client detected in /root/Desktop/Client/"
+fi
 
 echo "Starting TigerVNC server..."
 # Don't use Xvfb, let TigerVNC create its own X server

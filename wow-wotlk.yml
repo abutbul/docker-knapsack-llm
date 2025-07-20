@@ -1,0 +1,31 @@
+game:
+  arch: win64
+  exe: /root/Desktop/Client/Wow.exe
+  prefix: /root/.local/share/lutris/runners/winesteam/prefix
+  working_dir: /root/Desktop/Client
+
+system:
+  disable_runtime: true
+  env:
+    DXVK_HUD: '0'
+    DXVK_STATE_CACHE: '1'
+    STAGING_SHARED_MEMORY: '1'
+    WINE_LARGE_ADDRESS_AWARE: '1'
+    __GL_SHADER_DISK_CACHE: '1'
+    __GL_SHADER_DISK_CACHE_PATH: /root/Desktop/Client
+
+wine:
+  Desktop: false
+  WineDesktop: root
+  dxvk: true
+  esync: true
+  fsync: false
+  overrides:
+    dbghelp: disabled
+  version: lutris-6.21-8-x86_64
+
+dxvk:
+  d3d11: true
+  d3d9: true
+  dxgi: true
+  version: v1.10.3

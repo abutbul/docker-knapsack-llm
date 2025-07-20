@@ -51,8 +51,31 @@ RUN wget -nc https://dl.winehq.org/wine-builds/winehq.key && \
     apt-get install -y --install-recommends winehq-staging && \
     apt-get clean && rm -rf /var/lib/apt/lists/*
 
-# Install Python libraries
+# Install Python libraries and additional filesystem tools
 RUN pip3 install flask pyautogui pydirectinput
+
+# Set up directory for Lutris configuration
+RUN mkdir -p /root/.config/lutris/games
+
+# Copy Lutris configuration for WoW WotLK
+COPY wow-wotlk.yml /root/.config/lutris/games/wow-wotlk.yml
+
+# Create desktop shortcut for WoW
+RUN mkdir -p /root/Desktop && \
+    echo "[Desktop Entry]\n\
+Type=Application\n\
+Name=World of Warcraft: WotLK\n\
+Comment=Play World of Warcraft: Wrath of the Lich King\n\
+Exec=lutris lutris:rungame/wow-wotlk\n\
+Icon=lutris_world-of-warcraft-wrath-of-the-lich-king\n\
+Terminal=false\n\
+Categories=Game;\n\
+Keywords=wow;warcraft;wotlk;" > /root/Desktop/wow-wotlk.desktop && \
+chmod +x /root/Desktop/wow-wotlk.desktop
+
+# Copy overlay setup script
+COPY setup-overlay.sh /opt/setup-overlay.sh
+RUN chmod +x /opt/setup-overlay.sh
 
 # Copy API script and entrypoint
 COPY api.py /opt/api.py
@@ -61,6 +84,9 @@ RUN chmod +x /entrypoint.sh
 
 # Expose API and VNC ports
 EXPOSE 5000 5900
+
+# Create a volume mount point
+VOLUME /root/Desktop/Client
 
 # Entrypoint script handles startup
 ENTRYPOINT ["/entrypoint.sh"]

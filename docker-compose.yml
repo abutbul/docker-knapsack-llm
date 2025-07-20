@@ -1,0 +1,144 @@
+version: '3.8'
+
+services:
+  wow-client-1:
+    build: .
+    container_name: wow-client-1
+    ports:
+      - "5900:5900"  # VNC
+      - "5000:5000"  # API
+    volumes:
+      # Read-only client files shared across all instances
+      - ./wow-client:/mnt/wow-client:ro
+      # Writable overlay for saves, configs, etc. (each instance gets its own)
+      - wow-client-1-data:/root/Desktop/Client
+      # Lutris and Wine data persistence
+      - wow-client-1-lutris:/root/.local/share/lutris
+      - wow-client-1-wine:/root/.wine
+    environment:
+      - INSTANCE_ID=1
+      - VNC_PASSWD=password
+      - VNC_GEOMETRY=1280x800
+      - VNC_DEPTH=24
+    tmpfs:
+      - /tmp
+    restart: unless-stopped
+    networks:
+      - wow-network
+
+  wow-client-2:
+    build: .
+    container_name: wow-client-2
+    ports:
+      - "5901:5900"  # VNC
+      - "5001:5000"  # API
+    volumes:
+      - ./wow-client:/mnt/wow-client:ro
+      - wow-client-2-data:/root/Desktop/Client
+      - wow-client-2-lutris:/root/.local/share/lutris
+      - wow-client-2-wine:/root/.wine
+    environment:
+      - INSTANCE_ID=2
+      - VNC_PASSWD=password
+      - VNC_GEOMETRY=1280x800
+      - VNC_DEPTH=24
+    tmpfs:
+      - /tmp
+    restart: unless-stopped
+    networks:
+      - wow-network
+    profiles:
+      - multi
+
+  wow-client-3:
+    build: .
+    container_name: wow-client-3
+    ports:
+      - "5902:5900"  # VNC
+      - "5002:5000"  # API
+    volumes:
+      - ./wow-client:/mnt/wow-client:ro
+      - wow-client-3-data:/root/Desktop/Client
+      - wow-client-3-lutris:/root/.local/share/lutris
+      - wow-client-3-wine:/root/.wine
+    environment:
+      - INSTANCE_ID=3
+      - VNC_PASSWD=password
+      - VNC_GEOMETRY=1280x800
+      - VNC_DEPTH=24
+    tmpfs:
+      - /tmp
+    restart: unless-stopped
+    networks:
+      - wow-network
+    profiles:
+      - multi
+
+  wow-client-4:
+    build: .
+    container_name: wow-client-4
+    ports:
+      - "5903:5900"  # VNC
+      - "5003:5000"  # API
+    volumes:
+      - ./wow-client:/mnt/wow-client:ro
+      - wow-client-4-data:/root/Desktop/Client
+      - wow-client-4-lutris:/root/.local/share/lutris
+      - wow-client-4-wine:/root/.wine
+    environment:
+      - INSTANCE_ID=4
+      - VNC_PASSWD=password
+      - VNC_GEOMETRY=1280x800
+      - VNC_DEPTH=24
+    tmpfs:
+      - /tmp
+    restart: unless-stopped
+    networks:
+      - wow-network
+    profiles:
+      - multi
+
+  wow-client-5:
+    build: .
+    container_name: wow-client-5
+    ports:
+      - "5904:5900"  # VNC
+      - "5004:5000"  # API
+    volumes:
+      - ./wow-client:/mnt/wow-client:ro
+      - wow-client-5-data:/root/Desktop/Client
+      - wow-client-5-lutris:/root/.local/share/lutris
+      - wow-client-5-wine:/root/.wine
+    environment:
+      - INSTANCE_ID=5
+      - VNC_PASSWD=password
+      - VNC_GEOMETRY=1280x800
+      - VNC_DEPTH=24
+    tmpfs:
+      - /tmp
+    restart: unless-stopped
+    networks:
+      - wow-network
+    profiles:
+      - multi
+
+networks:
+  wow-network:
+    driver: bridge
+
+volumes:
+  wow-client-1-data:
+  wow-client-1-lutris:
+  wow-client-1-wine:
+  wow-client-2-data:
+  wow-client-2-lutris:
+  wow-client-2-wine:
+  wow-client-3-data:
+  wow-client-3-lutris:
+  wow-client-3-wine:
+  wow-client-4-data:
+  wow-client-4-lutris:
+  wow-client-4-wine:
+  wow-client-5-data:
+  wow-client-5-lutris:
+  wow-client-5-wine:
