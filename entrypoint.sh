@@ -57,6 +57,10 @@ mkdir -p /root/.config/lutris
 echo "Setting up overlay filesystem..."
 /opt/setup-overlay.sh
 
+# Initialize Wine environment with Mono and Gecko
+echo "Initializing Wine environment..."
+/opt/init-wine.sh
+
 # Set Wine and OpenGL environment variables
 export WINEARCH=win64
 export WINEPREFIX=/root/.wine

@@ -1,7 +1,7 @@
 game:
   arch: win64
   exe: /root/Desktop/Client/Wow.exe
-  prefix: /root/.local/share/lutris/runners/winesteam/prefix
+  prefix: /root/.wine
   working_dir: /root/Desktop/Client
 
 system:
@@ -13,19 +13,16 @@ system:
     WINE_LARGE_ADDRESS_AWARE: '1'
     __GL_SHADER_DISK_CACHE: '1'
     __GL_SHADER_DISK_CACHE_PATH: /root/Desktop/Client
+    WINEDLLOVERRIDES: 'mscoree,mshtml=disabled'
 
 wine:
   Desktop: false
-  WineDesktop: root
-  dxvk: true
+  WineDesktop: '1280x800'
+  dxvk: false
   esync: true
   fsync: false
   overrides:
     dbghelp: disabled
-  version: lutris-6.21-8-x86_64
-
-dxvk:
-  d3d11: true
-  d3d9: true
-  dxgi: true
-  version: v1.10.3
+    mscoree: disabled
+    mshtml: disabled
+  version: system

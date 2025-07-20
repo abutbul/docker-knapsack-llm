@@ -51,6 +51,19 @@ RUN wget -nc https://dl.winehq.org/wine-builds/winehq.key && \
     apt-get install -y --install-recommends winehq-staging && \
     apt-get clean && rm -rf /var/lib/apt/lists/*
 
+# Install Wine Mono and Gecko to avoid interactive prompts
+RUN mkdir -p /tmp/wine-setup && \
+    cd /tmp/wine-setup && \
+    wget https://dl.winehq.org/wine/wine-mono/7.4.0/wine-mono-7.4.0-x86.msi && \
+    wget https://dl.winehq.org/wine/wine-gecko/2.47.3/wine-gecko-2.47.3-x86.msi && \
+    wget https://dl.winehq.org/wine/wine-gecko/2.47.3/wine-gecko-2.47.3-x86_64.msi && \
+    mkdir -p /usr/share/wine/mono && \
+    mkdir -p /usr/share/wine/gecko && \
+    cp wine-mono-7.4.0-x86.msi /usr/share/wine/mono/ && \
+    cp wine-gecko-2.47.3-x86.msi /usr/share/wine/gecko/ && \
+    cp wine-gecko-2.47.3-x86_64.msi /usr/share/wine/gecko/ && \
+    rm -rf /tmp/wine-setup
+
 # Install Python libraries and additional filesystem tools
 RUN pip3 install flask pyautogui pydirectinput
 
@@ -60,22 +73,11 @@ RUN mkdir -p /root/.config/lutris/games
 # Copy Lutris configuration for WoW WotLK
 COPY wow-wotlk.yml /root/.config/lutris/games/wow-wotlk.yml
 
-# Create desktop shortcut for WoW
-RUN mkdir -p /root/Desktop && \
-    echo "[Desktop Entry]\n\
-Type=Application\n\
-Name=World of Warcraft: WotLK\n\
-Comment=Play World of Warcraft: Wrath of the Lich King\n\
-Exec=lutris lutris:rungame/wow-wotlk\n\
-Icon=lutris_world-of-warcraft-wrath-of-the-lich-king\n\
-Terminal=false\n\
-Categories=Game;\n\
-Keywords=wow;warcraft;wotlk;" > /root/Desktop/wow-wotlk.desktop && \
-chmod +x /root/Desktop/wow-wotlk.desktop
 
-# Copy overlay setup script
+# Copy overlay setup script and wine initialization
 COPY setup-overlay.sh /opt/setup-overlay.sh
-RUN chmod +x /opt/setup-overlay.sh
+COPY init-wine.sh /opt/init-wine.sh
+RUN chmod +x /opt/setup-overlay.sh /opt/init-wine.sh
 
 # Copy API script and entrypoint
 COPY api.py /opt/api.py
