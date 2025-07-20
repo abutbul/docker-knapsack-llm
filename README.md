@@ -2,6 +2,48 @@
 
 A containerized World of Warcraft: Wrath of the Lich King client environment with Lutris, Wine, and automation API support. This project enables running single or multiple WoW instances in isolated Docker containers with shared client files and individual configurations.
 
+## 📋 Table of Contents
+
+- [🚀 Quick Start](#-quick-start)
+- [📚 Documentation](#-documentation)
+- [🎮 Key Features](#-key-features)
+- [📋 Prerequisites](#-prerequisites)
+- [🎯 Usage Methods](#-usage-methods)
+- [🌐 API Endpoints](#-api-endpoints)
+- [📊 Resource Usage](#-resource-usage)
+- [🔧 Troubleshooting](#-troubleshooting)
+- [🚀 Advanced Usage](#-advanced-usage)
+
+## 📚 Documentation
+
+- **[Volume Cleanup Guide](VOLUME-CLEANUP-GUIDE.md)** - Comprehensive guide for managing container volumes and data cleanup
+- **[Dynamic Orchestration Guide](README-dynamic.md)** - Advanced scaling and orchestration methods for large deployments
+- **[Development Notes](initprompt.md)** - Initial design considerations and requirements
+
+### Management Scripts Available:
+- `manage-clients-dynamic.sh` - **Recommended**: Direct Docker container management with unlimited scaling
+- `manage-clients.sh` - Docker Compose based management (legacy)
+- `manage-clients-swarm.sh` - Docker Swarm orchestration for enterprise deployments
+
+## 🚀 Quick Start
+
+```bash
+# 1. Setup shared client directory
+./manage-clients-dynamic.sh setup
+
+# 2. Copy your licensed WoW client files to ./wow-client/
+cp -r /path/to/your/wow/client/* ./wow-client/
+
+# 3. Start 3 instances
+./manage-clients-dynamic.sh start 3
+
+# 4. Connect via VNC: localhost:5900, localhost:5901, localhost:5902
+# 5. Access APIs: localhost:5000, localhost:5001, localhost:5002
+```
+
+**Need help with volumes or cleanup?** → [Volume Cleanup Guide](VOLUME-CLEANUP-GUIDE.md)  
+**Want advanced scaling?** → [Dynamic Orchestration Guide](README-dynamic.md)
+
 ## 🎮 Key Features
 
 - **Shared Client Files**: Single copy of WoW client shared across all instances using overlay filesystem
@@ -10,7 +52,7 @@ A containerized World of Warcraft: Wrath of the Lich King client environment wit
 - **Lutris Integration**: Pre-configured Lutris environment optimized for WoW WotLK
 - **VNC Access**: Full desktop environment accessible via VNC for each instance
 - **Automation API**: REST API for sending keystrokes and mouse actions to instances
-- **Multi-Instance Support**: Run up to 5 concurrent WoW instances efficiently
+- **Multi-Instance Support**: Run unlimited concurrent WoW instances efficiently (default limit: 50, configurable)
 
 ## 📋 Prerequisites
 
@@ -62,6 +104,8 @@ Container Instances:
 
 ## 🎯 Usage Methods
 
+> **Recommendation**: Use the **Dynamic Management** approach (`manage-clients-dynamic.sh`) for all deployments unless you specifically need Docker Compose workflows. See [Dynamic Orchestration Guide](README-dynamic.md) for comparison of all available methods.
+
 ### Method 1: Single Player Setup
 
 Perfect for individual players who want to run WoW in a containerized environment.
@@ -83,8 +127,8 @@ Perfect for individual players who want to run WoW in a containerized environmen
 
 3. **Start single instance**:
    ```bash
-   ./manage-clients.sh setup 1
-   ./manage-clients.sh start 1
+   ./manage-clients-dynamic.sh setup
+   ./manage-clients-dynamic.sh start 1
    ```
 
 4. **Connect via VNC**:
@@ -119,43 +163,49 @@ Ideal for larger deployments, multiple accounts, or testing scenarios.
 
 1. **Prepare shared client**:
    ```bash
-   ./manage-clients.sh setup 5  # Prepare for up to 5 instances
+   ./manage-clients-dynamic.sh setup
    # Copy your WoW client to ./wow-client/ (shared by all instances)
    ```
 
 2. **Start multiple instances**:
    ```bash
-   ./manage-clients.sh start 3  # Start 3 instances
+   ./manage-clients-dynamic.sh start 10  # Start 10 instances
    ```
 
 3. **Access instances**:
    ```
    Instance 1: VNC localhost:5900, API localhost:5000
    Instance 2: VNC localhost:5901, API localhost:5001  
-   Instance 3: VNC localhost:5902, API localhost:5002
+   Instance 10: VNC localhost:5909, API localhost:5009
    ```
 
 #### Management Commands:
 
 **Status Monitoring**:
 ```bash
-./manage-clients.sh status
+./manage-clients-dynamic.sh status
 # Shows running state, ports, and resource usage for all instances
 ```
 
 **Scaling Operations**:
 ```bash
-./manage-clients.sh start 1     # Single instance
-./manage-clients.sh start 5     # Maximum instances
-./manage-clients.sh stop        # Stop all instances
+./manage-clients-dynamic.sh start 10    # Start 10 instances
+./manage-clients-dynamic.sh scale 25    # Scale to exactly 25 instances
+./manage-clients-dynamic.sh stop        # Stop all instances
 ```
 
-**Advanced Docker Compose**:
+**Volume Management** (see [Volume Cleanup Guide](VOLUME-CLEANUP-GUIDE.md)):
 ```bash
-# Manual control for specific instances
-docker-compose up -d wow-client-1 wow-client-3
-docker-compose --profile multi up -d  # All instances
-docker-compose logs wow-client-2       # Logs for specific instance
+./manage-clients-dynamic.sh clean-volumes 5    # Clean specific instance
+./manage-clients-dynamic.sh clean-stopped      # Clean stopped containers
+./manage-clients-dynamic.sh clean-all          # Nuclear option (with confirmation)
+```
+
+**Configuration**:
+```bash
+# Override default limits
+export MAX_INSTANCES=100
+./manage-clients-dynamic.sh start 50
 ```
 
 #### Multi-Instance Benefits:
@@ -175,7 +225,8 @@ docker-compose logs wow-client-2       # Logs for specific instance
 - `init-wine.sh`: Wine environment bootstrap with Mono/Gecko
 - `wow-wotlk.yml`: Lutris configuration optimized for WoW WotLK
 - `snapshot-service.sh`: Independent desktop screenshot service
-- `manage-clients.sh`: Instance management and control script
+- `manage-clients-dynamic.sh`: Primary instance management and control script (recommended)
+- `manage-clients.sh`: Alternative docker-compose based management script
 
 ### Environment Variables
 
@@ -338,14 +389,20 @@ The test script will:
 ## 📊 Resource Usage
 
 ### Storage Efficiency:
-- **Traditional Setup**: 17GB × 5 instances = 85GB
-- **This Setup**: 17GB + (264KB × 5 instances) = ~17GB total
-- **Space Savings**: ~68GB (80% reduction)
+- **Traditional Setup**: 17GB × 50 instances = 850GB
+- **This Setup**: 17GB + (264KB × 50 instances) = ~17GB total
+- **Space Savings**: ~833GB (98% reduction for large deployments)
 
 ### Memory Usage:
 - Base container: ~200MB
 - Per WoW instance: ~1-2GB (depending on game settings)
-- Total for 5 instances: ~5-10GB
+- Total for 10 instances: ~10-20GB
+- Total for 50 instances: ~50-100GB
+
+### Scalability:
+- **Default Limit**: 50 instances (configurable with `MAX_INSTANCES`)
+- **Port Range**: VNC 5900-5949, API 5000-5049 (for 50 instances)
+- **Recommended**: Use SSD storage for optimal performance
 
 ## 🔧 Troubleshooting
 
@@ -365,16 +422,16 @@ The test script will:
 3. **VNC Connection Issues**:
    ```bash
    # Check container status
-   ./manage-clients.sh status
+   ./manage-clients-dynamic.sh status
    
    # View container logs
-   docker logs wow-client-1
+   docker logs wow-clients-client-1
    ```
 
 4. **Desktop Snapshot Issues**:
    ```bash
    # Check snapshot service health
-   docker exec wow-client-1 /opt/health_check.sh
+   docker exec wow-clients-client-1 /opt/health_check.sh
    
    # Manual screenshot test
    curl http://localhost:5000/snapshot-info
@@ -396,7 +453,8 @@ docker-player/
 ├── init-wine.sh           # Wine environment bootstrap
 ├── wow-wotlk.yml          # Lutris configuration for WoW
 ├── api.py                 # Flask API server with screenshot service
-├── manage-clients.sh      # Instance management script
+├── manage-clients-dynamic.sh # Primary instance management (recommended)
+├── manage-clients.sh      # Alternative docker-compose management script
 ├── test_api.py           # API testing script
 ├── test_vnc.py           # VNC connectivity test
 ├── health_check.sh       # Desktop snapshot service monitor
@@ -416,8 +474,8 @@ Modify `init-wine.sh` to add custom Wine settings or install additional Windows 
 ### Lutris Customization:
 Edit `wow-wotlk.yml` to adjust game-specific settings like graphics, audio, or performance options.
 
-### Scaling Beyond 5 Instances:
-Modify `docker-compose.yml` and `manage-clients.sh` to support more instances if needed.
+### Scaling Beyond Default Limits:
+See the [Dynamic Orchestration Guide](README-dynamic.md) for advanced scaling methods and configuration options. The dynamic script supports scaling to hundreds of instances with proper resource allocation.
 
 ### Integration with Orchestration:
 This setup can be integrated with Kubernetes or Docker Swarm for larger deployments.
