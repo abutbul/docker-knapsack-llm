@@ -1,4 +1,4 @@
-# WoW WotLK Docker Player
+# Computer use Docker Player (LLM Research)
 
 A containerized World of Warcraft: Wrath of the Lich King client environment with Lutris, Wine, and automation API support. This project enables running single or multiple WoW instances in isolated Docker containers with shared client files and individual configurations.
 
@@ -6,6 +6,7 @@ A containerized World of Warcraft: Wrath of the Lich King client environment wit
 
 - [🚀 Quick Start](#-quick-start)
 - [📚 Documentation](#-documentation)
+- [🧠 AI Research & Emergent Behavior Studies](#---ai-research---emergent-behavior-studies)
 - [🎮 Key Features](#-key-features)
 - [📋 Prerequisites](#-prerequisites)
 - [🎯 Usage Methods](#-usage-methods)
@@ -18,7 +19,6 @@ A containerized World of Warcraft: Wrath of the Lich King client environment wit
 
 - **[Volume Cleanup Guide](VOLUME-CLEANUP-GUIDE.md)** - Comprehensive guide for managing container volumes and data cleanup
 - **[Dynamic Orchestration Guide](README-dynamic.md)** - Advanced scaling and orchestration methods for large deployments
-- **[Development Notes](initprompt.md)** - Initial design considerations and requirements
 
 ### Management Scripts Available:
 - `manage-clients-dynamic.sh` - **Recommended**: Direct Docker container management with unlimited scaling
@@ -56,7 +56,7 @@ This platform is specifically designed for studying **emergent behaviors of LLMs
 
 ### Planned Research Enhancements Roadmap:
 
-#### Advanced Telemetry
+#### Advanced Telemetry Roadmap:
 ```bash
 # Future telemetry capabilities
 GET /agent-metrics           # Decision frequency, action patterns
@@ -64,7 +64,7 @@ GET /behavioral-log          # Detailed action history with context
 GET /performance-stats       # Response times, error rates
 ```
 
-#### Sandboxing & Safety:
+#### Sandboxing & Safety Roadmap:
 ```bash
 # Enhanced containment for rogue model behavior
 ENABLE_NETWORK_ISOLATION=true    # Block external network access
@@ -73,7 +73,7 @@ ENABLE_ACTION_FILTERING=true     # Whitelist/blacklist actions
 ENABLE_BEHAVIORAL_BOUNDS=true    # Detect anomalous behavior
 ```
 
-#### 📊 Research Data Collection:
+#### 📊 Research Data Collection Roadmap:
 - **Action Sequences**: Every mouse/keyboard action with timestamps
 - **Visual Attention**: Eye-tracking equivalent for AI visual processing
 - **Decision Context**: Screenshot + action pairs for training data
