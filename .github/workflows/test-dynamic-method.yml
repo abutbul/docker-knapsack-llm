@@ -190,8 +190,9 @@ jobs:
           
           if [[ "$health_status" == "200" ]]; then
             echo "✅ Health check passed on attempt $attempt"
-            ((api_success++))
-            echo "DEBUG: api_success value is now $api_success"
+            echo "DEBUG: api_success before: $api_success"
+            api_success=$((api_success + 1))
+            echo "DEBUG: api_success after: $api_success"
             break
           else
             echo "⏳ Health check attempt $attempt failed, retrying..."
@@ -206,7 +207,8 @@ jobs:
         
         # Test desktop snapshot with retry
         echo "Testing desktop snapshot..."
-        echo "DEBUG: Starting desktop snapshot test"
+        echo "DEBUG: Starting desktop snapshot test with set -e state: $-"
+        echo "DEBUG: Testing if we get here"
         for attempt in {1..5}; do
           echo "DEBUG: Attempting desktop snapshot $attempt"
           snapshot_status=$(curl -f -s -w "%{http_code}" http://localhost:5000/desktop-snapshot -o /dev/null || echo "failed")
@@ -214,8 +216,9 @@ jobs:
           
           if [[ "$snapshot_status" == "200" ]]; then
             echo "✅ Desktop snapshot passed on attempt $attempt"
-            ((api_success++))
-            echo "DEBUG: api_success value is now $api_success"
+            echo "DEBUG: api_success before: $api_success"
+            api_success=$((api_success + 1))
+            echo "DEBUG: api_success after: $api_success"
             break
           else
             echo "⏳ Desktop snapshot attempt $attempt failed, retrying..."
