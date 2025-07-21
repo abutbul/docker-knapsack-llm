@@ -197,7 +197,7 @@ jobs:
         # Test desktop snapshot with retry
         echo "Testing desktop snapshot..."
         for attempt in {1..5}; do
-          if curl -f http://localhost:5000/desktop-snapshot; then
+          if curl -f http://localhost:5000/desktop-snapshot -o /dev/null; then
             echo "✅ Desktop snapshot passed on attempt $attempt"
             ((api_success++))
             break
