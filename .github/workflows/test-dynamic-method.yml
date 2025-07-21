@@ -1,27 +1,13 @@
 name: Test Dynamic Docker Method
 
 on:
-  workflow_call:
-    inputs:
-      test_scale_count:
-        description: 'Number of instances to test scaling'
-        required: false
-        default: '3'
-        type: string
-    outputs:
-      test_results:
-        description: 'JSON formatted test results'
-        value: ${{ jobs.test-dynamic.outputs.test_results }}
-      success_count:
-        description: 'Number of successful tests'
-        value: ${{ jobs.test-dynamic.outputs.success_count }}
-      total_count:
-        description: 'Total number of tests'
-        value: ${{ jobs.test-dynamic.outputs.total_count }}
+  push:
+  pull_request:
+  workflow_dispatch:
 
 env:
   DOCKER_BUILDKIT: 1
-  TEST_SCALE_COUNT: ${{ inputs.test_scale_count || '3' }}
+  TEST_SCALE_COUNT: 3
 
 jobs:
   test-dynamic:
@@ -342,10 +328,24 @@ jobs:
         echo "✅ Passed: $success_count/$total_count"
         echo "⚠️  Partial: $partial_count/$total_count"
         echo "❌ Failed: $((total_count - success_count - partial_count))/$total_count"
-        
-    - name: Upload Dynamic Test Results
-      uses: actions/upload-artifact@v4
-      with:
-        name: dynamic-test-results
-        path: test_results.json
+    - name: Print Markdown Test Report
+      run: |
+        echo '## 🧪 Dynamic Docker Method Test Report'
+        echo ''
+        jq -r '
+          to_entries[] | 
+          "### " + (.key | gsub("_"; " ") | ascii_upcase) + "\n- **Result:** " + .value.result + "\n- " + .value.message + "\n"
+        ' test_results.json
+        echo ''
+        echo "| Test | Result | Message |"
+        echo "|------|--------|---------|"
+        jq -r '
+          to_entries[] | 
+          "| " + (.key | gsub("_"; " ") | ascii_upcase) + " | " + .value.result + " | " + .value.message + " |"
+        ' test_results.json
+        echo ''
+        echo "**Summary:**"
+        echo "- ✅ Passed: ${{ steps.collect-results.outputs.success_count }}/${{ steps.collect-results.outputs.total_count }}"
+        echo "- ⚠️  Partial: $(jq '[.[] | select(.result=="PARTIAL")] | length' test_results.json)/${{ steps.collect-results.outputs.total_count }}"
+        echo "- ❌ Failed: $(( ${{ steps.collect-results.outputs.total_count }} - ${{ steps.collect-results.outputs.success_count }} - $(jq '[.[] | select(.result=="PARTIAL")] | length' test_results.json) ))/${{ steps.collect-results.outputs.total_count }}"
         retention-days: 7
