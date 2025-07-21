@@ -119,7 +119,8 @@ jobs:
             if netstat -tuln | grep -q ":$port "; then
               echo "✅ VNC port $port is listening"
               port_ready=true
-              ((vnc_ports_ok++))
+              vnc_ports_ok=$((vnc_ports_ok + 1))
+
               break
             else
               echo "⏳ VNC port $port not ready yet, waiting..."
