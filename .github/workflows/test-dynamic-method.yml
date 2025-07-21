@@ -78,7 +78,8 @@ jobs:
       run: |
         echo "=== Testing Dynamic Method - Scale Up to $TEST_SCALE_COUNT ==="
         if timeout 300 ./manage-clients-dynamic.sh scale $TEST_SCALE_COUNT; then
-          sleep 5
+          echo "Waiting for containers to fully initialize..."
+          sleep 15
           ./manage-clients-dynamic.sh status
           echo "result=PASS" >> $GITHUB_OUTPUT
           echo "message=Scaled up to $TEST_SCALE_COUNT instances successfully" >> $GITHUB_OUTPUT
@@ -91,19 +92,69 @@ jobs:
       id: test-multiple-vnc-ports
       run: |
         echo "=== Testing Multiple VNC Ports after scaling ==="
-        sleep 5
+        echo "Waiting for containers to start and VNC servers to initialize..."
         
-        # Check if all VNC ports are listening based on scale count
+        # Function to check container logs for errors
+        check_container_logs() {
+          local container_name=$1
+          echo "--- Logs for $container_name ---"
+          docker logs --tail 20 "$container_name" 2>&1 || echo "No logs available for $container_name"
+        }
+        
+        # Wait for VNC ports with retry logic (max 60 seconds)
         vnc_ports_ok=0
-        for i in $(seq 0 $((TEST_SCALE_COUNT - 1))); do
-          port=$((5900 + i))
-          if netstat -tuln | grep -q ":$port "; then
-            echo "✅ VNC port $port is listening"
-            ((vnc_ports_ok++))
-          else
-            echo "❌ VNC port $port is not listening"
+        max_wait=60
+        start_time=$(date +%s)
+        
+        for i in $(seq 1 $TEST_SCALE_COUNT); do
+          port=$((5900 + i - 1))
+          container_name="wow-clients-client-$i"
+          echo "Checking VNC port $port for container $container_name..."
+          
+          # Reset timer for each port
+          port_start_time=$(date +%s)
+          port_ready=false
+          
+          while [ $(($(date +%s) - port_start_time)) -lt $max_wait ]; do
+            if netstat -tuln | grep -q ":$port "; then
+              echo "✅ VNC port $port is listening"
+              port_ready=true
+              ((vnc_ports_ok++))
+              break
+            else
+              echo "⏳ VNC port $port not ready yet, waiting..."
+              
+              # Check if container is running
+              if ! docker ps -q --filter "name=^${container_name}$" | grep -q .; then
+                echo "❌ Container $container_name is not running!"
+                check_container_logs "$container_name"
+                break
+              fi
+              
+              # Show container logs every 10 seconds for debugging
+              elapsed=$(($(date +%s) - port_start_time))
+              if [ $((elapsed % 10)) -eq 0 ] && [ $elapsed -gt 0 ]; then
+                echo "Container logs after ${elapsed}s:"
+                check_container_logs "$container_name"
+              fi
+              
+              sleep 2
+            fi
+          done
+          
+          if [ "$port_ready" = false ]; then
+            echo "❌ VNC port $port failed to become ready within $max_wait seconds"
+            check_container_logs "$container_name"
           fi
         done
+        
+        # Final summary
+        echo "=== VNC Port Check Summary ==="
+        echo "Ready ports: $vnc_ports_ok/$TEST_SCALE_COUNT"
+        
+        # Show all container statuses
+        echo "=== Container Status ==="
+        docker ps --filter "name=wow-clients-client-" --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
         
         if [ $vnc_ports_ok -eq $TEST_SCALE_COUNT ]; then
           echo "result=PASS" >> $GITHUB_OUTPUT
@@ -120,24 +171,43 @@ jobs:
       id: test-api
       run: |
         echo "=== Testing Dynamic Method - API Tests ==="
-        sleep 10
+        echo "Waiting for API services to be ready..."
+        sleep 20
         api_success=0
         
-        # Test health endpoint
-        if curl -f http://localhost:5000/health; then
-          echo "✅ Health check passed"
-          ((api_success++))
-        else
-          echo "❌ Health check failed"
-        fi
+        # Test health endpoint with retry
+        echo "Testing health endpoint..."
+        for attempt in {1..10}; do
+          if curl -f http://localhost:5000/health; then
+            echo "✅ Health check passed on attempt $attempt"
+            ((api_success++))
+            break
+          else
+            echo "⏳ Health check attempt $attempt failed, retrying..."
+            if [ $attempt -eq 10 ]; then
+              echo "❌ Health check failed after 10 attempts"
+              echo "Container logs:"
+              docker logs --tail 20 wow-clients-client-1 2>&1 || echo "No logs available"
+            fi
+            sleep 3
+          fi
+        done
         
-        # Test desktop snapshot
-        if curl -f http://localhost:5000/desktop-snapshot; then
-          echo "✅ Desktop snapshot passed"
-          ((api_success++))
-        else
-          echo "❌ Desktop snapshot failed"
-        fi
+        # Test desktop snapshot with retry
+        echo "Testing desktop snapshot..."
+        for attempt in {1..5}; do
+          if curl -f http://localhost:5000/desktop-snapshot; then
+            echo "✅ Desktop snapshot passed on attempt $attempt"
+            ((api_success++))
+            break
+          else
+            echo "⏳ Desktop snapshot attempt $attempt failed, retrying..."
+            if [ $attempt -eq 5 ]; then
+              echo "❌ Desktop snapshot failed after 5 attempts"
+            fi
+            sleep 5
+          fi
+        done
         
         if [ $api_success -eq 2 ]; then
           echo "result=PASS" >> $GITHUB_OUTPUT
@@ -164,12 +234,37 @@ jobs:
       id: test-vnc-port
       run: |
         echo "=== Testing VNC Port Listening ==="
-        if netstat -tuln | grep -q ":5900 "; then
+        echo "Waiting for VNC port 5900 to be ready..."
+        
+        # Wait for VNC port with retry logic (max 30 seconds)
+        max_wait=30
+        start_time=$(date +%s)
+        port_ready=false
+        
+        while [ $(($(date +%s) - start_time)) -lt $max_wait ]; do
+          if netstat -tuln | grep -q ":5900 "; then
+            echo "✅ VNC port 5900 is listening"
+            port_ready=true
+            break
+          else
+            echo "⏳ VNC port 5900 not ready yet, waiting..."
+            
+            # Check container logs for debugging
+            if docker ps -q --filter "name=wow-clients-client-1" | grep -q .; then
+              echo "Container logs:"
+              docker logs --tail 10 wow-clients-client-1 2>&1 || echo "No logs available"
+            fi
+            
+            sleep 2
+          fi
+        done
+        
+        if [ "$port_ready" = true ]; then
           echo "result=PASS" >> $GITHUB_OUTPUT
           echo "message=VNC port 5900 is listening" >> $GITHUB_OUTPUT
         else
           echo "result=FAIL" >> $GITHUB_OUTPUT
-          echo "message=VNC port 5900 is not listening" >> $GITHUB_OUTPUT
+          echo "message=VNC port 5900 is not listening after $max_wait seconds" >> $GITHUB_OUTPUT
         fi
         
     - name: Test VNC Connection Script
