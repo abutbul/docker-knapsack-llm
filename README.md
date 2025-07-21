@@ -18,11 +18,6 @@ This is currently suited for World of Warcraft: Wrath of the Lich King client bu
 - [🔧 Troubleshooting](#-troubleshooting)
 - [🚀 Advanced Usage](#-advanced-usage)
 
-## 📚 Documentation
-
-- **[Volume Cleanup Guide](VOLUME-CLEANUP-GUIDE.md)** - Comprehensive guide for managing container volumes and data cleanup
-- **[Dynamic Orchestration Guide](README-dynamic.md)** - Advanced scaling and orchestration methods for large deployments
-
 ### Management Scripts Available:
 - `manage-clients-dynamic.sh` - **Recommended**: Direct Docker container management with unlimited scaling
 - `manage-clients.sh` - Docker Compose based management (legacy)

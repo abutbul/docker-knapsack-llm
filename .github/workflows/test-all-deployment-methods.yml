@@ -93,22 +93,25 @@ jobs:
                 echo "| Test | Status | Details |" >> comprehensive-report.md
                 echo "|------|--------|---------|" >> comprehensive-report.md
                 
-                # Extract and format each test result
-                jq -r 'to_entries[] | "\(.key)|\(.value.result)|\(.value.message)"' "$json_file" | while IFS='|' read -r test_name result message; do
+                # Use a temporary file to avoid subshell issues with counters
+                temp_results=$(mktemp)
+                jq -r 'to_entries[] | "\(.key)|\(.value.result)|\(.value.message)"' "$json_file" > "$temp_results"
+                
+                while IFS='|' read -r test_name result message; do
                     case "$result" in
-                        "PASS") status_icon="✅"; ((total_passed++)) ;;
-                        "PARTIAL") status_icon="⚠️"; ((total_partial++)) ;;
-                        "FAIL") status_icon="❌"; ((total_failed++)) ;;
-                        *) status_icon="❓"; ((total_failed++)) ;;
+                        "PASS") status_icon="✅" ;;
+                        "PARTIAL") status_icon="⚠️" ;;
+                        "FAIL") status_icon="❌" ;;
+                        *) status_icon="❓" ;;
                     esac
-                    ((total_tests++))
                     
                     # Format test name for readability
                     formatted_name=$(echo "$test_name" | sed 's/_/ /g' | sed 's/\b\w/\u&/g')
                     echo "| $formatted_name | $status_icon $result | $message |" >> comprehensive-report.md
-                done
+                done < "$temp_results"
+                rm "$temp_results"
                 
-                # Get summary counts from JSON
+                # Get summary counts from JSON (fix the counting issue)
                 method_passed=$(jq '[.[] | select(.result == "PASS")] | length' "$json_file")
                 method_partial=$(jq '[.[] | select(.result == "PARTIAL")] | length' "$json_file")
                 method_total=$(jq '. | length' "$json_file")
@@ -126,7 +129,7 @@ jobs:
                     echo "- 📊 Success Rate: $success_rate%" >> comprehensive-report.md
                 fi
                 
-                # Update global counters
+                # Update global counters properly
                 total_passed=$((total_passed + method_passed))
                 total_partial=$((total_partial + method_partial))
                 total_failed=$((total_failed + method_failed))

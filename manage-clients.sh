@@ -111,6 +111,8 @@ function show_status() {
     echo "WoW Client Instance Status:"
     echo "=========================="
     
+    local found_containers=0
+    
     for i in {1..20}; do
         local container_name="wow-client-$i"
         local status=$(docker ps --filter "name=$container_name" --format "{{.Status}}" 2>/dev/null)
@@ -121,14 +123,43 @@ function show_status() {
             echo "  Instance $i: RUNNING ($status)"
             echo "    VNC: localhost:$vnc_port"
             echo "    API: localhost:$api_port"
+            found_containers=1
         elif docker ps -a --filter "name=$container_name" --format "{{.Names}}" | grep -q "^$container_name$"; then
             echo "  Instance $i: STOPPED"
+            found_containers=1
         fi
     done
     
     echo ""
     echo "Active containers:"
     docker ps --filter "name=wow-client" --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
+    
+    echo ""
+    echo "Resource usage:"
+    local running_containers=$(docker ps -q --filter "name=wow-client")
+    if [ -n "$running_containers" ]; then
+        docker stats --no-stream --format "table {{.Name}}\t{{.CPUPerc}}\t{{.MemUsage}}" $running_containers
+    else
+        echo "No running containers to show stats for"
+    fi
+    
+    # If we expected containers but didn't find any, that's an error
+    if [ $found_containers -eq 0 ]; then
+        # Check for containers created by other methods (Docker Compose or Dynamic)
+        local compose_containers=$(docker ps --filter "name=wow-clients-client" --format "{{.Names}}" | wc -l)
+        local all_wow_containers=$(docker ps --filter "name=wow" --format "{{.Names}}" | wc -l)
+        
+        if [ $compose_containers -gt 0 ]; then
+            echo ""
+            echo "Note: Found $compose_containers containers created by other methods (Dynamic/Compose):"
+            docker ps --filter "name=wow-clients-client" --format "  {{.Names}} ({{.Status}})"
+            echo "Use './manage-clients-dynamic.sh status' to manage these containers."
+            return 0  # Don't treat this as an error
+        elif [ $all_wow_containers -eq 0 ]; then
+            echo "Warning: No WoW client containers found"
+            return 1
+        fi
+    fi
 }
 
 function clean_volumes() {

@@ -78,14 +78,55 @@ jobs:
       id: test-status
       run: |
         echo "=== Testing Swarm Method - Status ==="
+        # Give services time to start
+        sleep 20
+        
+        status_success=0
+        
+        # Check if swarm is active
+        if docker info --format '{{.Swarm.LocalNodeState}}' | grep -q "active"; then
+          echo "✅ Swarm mode is active"
+          ((status_success++))
+        else
+          echo "❌ Swarm mode is not active"
+        fi
+        
+        # Check if our stack is deployed
+        if docker stack ls --format "{{.Name}}" | grep -q "^wow-clients$"; then
+          echo "✅ Stack 'wow-clients' is deployed"
+          ((status_success++))
+        else
+          echo "❌ Stack 'wow-clients' is not deployed"
+        fi
+        
+        # Check if our service exists
+        if docker service ls --filter "name=wow-clients_wow-client" --format "{{.Name}}" | grep -q "wow-clients_wow-client"; then
+          echo "✅ Service 'wow-clients_wow-client' exists"
+          ((status_success++))
+        else
+          echo "❌ Service 'wow-clients_wow-client' does not exist"
+        fi
+        
+        # Run the status command (should now pass with the fixed script)
         if ./manage-clients-swarm.sh status; then
-          echo "Services:"
-          docker service ls
+          echo "✅ Status command executed successfully"
+          ((status_success++))
+        else
+          echo "❌ Status command failed"
+        fi
+        
+        echo "Services:"
+        docker service ls
+        
+        if [ $status_success -eq 4 ]; then
           echo "result=PASS" >> $GITHUB_OUTPUT
-          echo "message=Status check completed successfully" >> $GITHUB_OUTPUT
+          echo "message=Status check completed successfully (4/4 checks passed)" >> $GITHUB_OUTPUT
+        elif [ $status_success -gt 0 ]; then
+          echo "result=PARTIAL" >> $GITHUB_OUTPUT
+          echo "message=Status check partially passed ($status_success/4 checks passed)" >> $GITHUB_OUTPUT
         else
           echo "result=FAIL" >> $GITHUB_OUTPUT
-          echo "message=Status check failed" >> $GITHUB_OUTPUT
+          echo "message=Status check failed (0/4 checks passed)" >> $GITHUB_OUTPUT
         fi
         
     - name: Test Swarm - Scale Up

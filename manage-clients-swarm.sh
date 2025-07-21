@@ -100,10 +100,16 @@ function show_status() {
     echo "WoW Client Service Status:"
     echo "========================="
     
+    # Check if we're in swarm mode first
+    if ! docker info --format '{{.Swarm.LocalNodeState}}' 2>/dev/null | grep -q "active"; then
+        echo "Error: Docker is not in swarm mode. Run '$0 init' first."
+        return 1
+    fi
+    
     # Check if stack exists
     if ! docker stack ls --format "{{.Name}}" | grep -q "^${STACK_NAME}$"; then
         echo "Stack '$STACK_NAME' is not deployed"
-        return
+        return 1
     fi
     
     # Show service status

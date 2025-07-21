@@ -99,9 +99,39 @@ jobs:
       id: test-status
       run: |
         echo "=== Testing Legacy Method - Status ==="
+        # Give containers time to fully start
+        sleep 20
+        
         status_success=0
         
-        # Check script status
+        # Check if docker-compose file exists
+        if [ -f "docker-compose.generated.yml" ]; then
+          echo "✅ Generated compose file exists"
+          ((status_success++))
+        else
+          echo "❌ Generated compose file missing"
+        fi
+        
+        # Check docker-compose status first
+        if docker-compose -f docker-compose.generated.yml ps | grep -q "Up"; then
+          echo "✅ Docker-compose shows containers running"
+          ((status_success++))
+        else
+          echo "❌ Docker-compose shows no running containers"
+          docker-compose -f docker-compose.generated.yml ps
+        fi
+        
+        # Check docker ps for our containers
+        running_containers=$(docker ps --filter "name=wow-clients-client" --format "{{.Names}}" | wc -l)
+        if [ "$running_containers" -gt 0 ]; then
+          echo "✅ Found $running_containers running containers with expected name pattern"
+          ((status_success++))
+        else
+          echo "❌ No containers found with expected name pattern"
+          docker ps --filter "name=wow"
+        fi
+        
+        # Check script status (with our improved error handling)
         if ./manage-clients.sh status; then
           echo "✅ Script status check passed"
           ((status_success++))
@@ -109,20 +139,15 @@ jobs:
           echo "❌ Script status check failed"
         fi
         
-        # Check docker-compose status
-        if docker-compose -f docker-compose.generated.yml ps; then
-          echo "✅ Docker-compose status check passed"
-          ((status_success++))
-        else
-          echo "❌ Docker-compose status check failed"
-        fi
-        
-        if [ $status_success -eq 2 ]; then
+        if [ $status_success -eq 4 ]; then
           echo "result=PASS" >> $GITHUB_OUTPUT
-          echo "message=Status check completed successfully (2/2)" >> $GITHUB_OUTPUT
-        else
+          echo "message=Status check completed successfully (4/4 checks passed)" >> $GITHUB_OUTPUT
+        elif [ $status_success -gt 0 ]; then
           echo "result=PARTIAL" >> $GITHUB_OUTPUT
-          echo "message=Status check partially passed ($status_success/2)" >> $GITHUB_OUTPUT
+          echo "message=Status check partially passed ($status_success/4 checks passed)" >> $GITHUB_OUTPUT
+        else
+          echo "result=FAIL" >> $GITHUB_OUTPUT
+          echo "message=Status check failed (0/4 checks passed)" >> $GITHUB_OUTPUT
         fi
         
     - name: Test Legacy - Container Verification

@@ -289,7 +289,12 @@ function show_status() {
     
     echo ""
     echo "Resource usage:"
-    docker stats --no-stream -f name="${PROJECT_NAME}-client-" --format "table {{.Name}}\t{{.CPUPerc}}\t{{.MemUsage}}" 2>/dev/null || echo "No running containers to show stats for"
+    local running_containers=$(docker ps -q -f name="${PROJECT_NAME}-client-")
+    if [ -n "$running_containers" ]; then
+        docker stats --no-stream --format "table {{.Name}}\t{{.CPUPerc}}\t{{.MemUsage}}" $running_containers
+    else
+        echo "No running containers to show stats for"
+    fi
 }
 
 function clean_volumes() {
