@@ -471,4 +471,10 @@ jobs:
         echo "- ✅ Passed: ${{ steps.collect-results.outputs.success_count }}/${{ steps.collect-results.outputs.total_count }}"
         echo "- ⚠️  Partial: $(jq '[.[] | select(.result=="PARTIAL")] | length' test_results.json)/${{ steps.collect-results.outputs.total_count }}"
         echo "- ❌ Failed: $(( ${{ steps.collect-results.outputs.total_count }} - ${{ steps.collect-results.outputs.success_count }} - $(jq '[.[] | select(.result=="PARTIAL")] | length' test_results.json) ))/${{ steps.collect-results.outputs.total_count }}"
+      
+    - name: Save artifacts
+      uses: actions/upload-artifact@v3
+      with:
+        name: test-results
+        path: test_results.json
         retention-days: 7
