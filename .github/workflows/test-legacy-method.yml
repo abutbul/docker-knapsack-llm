@@ -113,12 +113,12 @@ jobs:
         fi
         
         # Check docker-compose status first
-        if docker-compose -f docker-compose.generated.yml ps | grep -q "Up"; then
+        if docker compose -f docker-compose.generated.yml ps | grep -q "Up"; then
           echo "✅ Docker-compose shows containers running"
           ((status_success++))
         else
           echo "❌ Docker-compose shows no running containers"
-          docker-compose -f docker-compose.generated.yml ps
+          docker compose -f docker-compose.generated.yml ps
         fi
         
         # Check docker ps for our containers

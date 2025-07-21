@@ -80,10 +80,10 @@ function start_instances() {
     
     # Build the image first
     echo "Building Docker image..."
-    docker-compose -f docker-compose.generated.yml build
+    docker compose -f docker-compose.generated.yml build
     
     # Start all instances
-    docker-compose -f docker-compose.generated.yml up -d
+    docker compose -f docker-compose.generated.yml up -d
     
     echo ""
     echo "Instances started! Access them via:"
@@ -99,9 +99,9 @@ function stop_instances() {
     
     # Use the generated compose file if it exists, otherwise try the original
     if [ -f "docker-compose.generated.yml" ]; then
-        docker-compose -f docker-compose.generated.yml down
+        docker compose -f docker-compose.generated.yml down
     else
-        docker-compose --profile multi down
+        docker compose --profile multi down
     fi
     
     echo "All instances stopped."
