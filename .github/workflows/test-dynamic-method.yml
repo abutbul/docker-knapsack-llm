@@ -473,7 +473,7 @@ jobs:
         echo "- ❌ Failed: $(( ${{ steps.collect-results.outputs.total_count }} - ${{ steps.collect-results.outputs.success_count }} - $(jq '[.[] | select(.result=="PARTIAL")] | length' test_results.json) ))/${{ steps.collect-results.outputs.total_count }}"
       
     - name: Save artifacts
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: test-results
         path: test_results.json
