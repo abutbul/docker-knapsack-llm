@@ -1,0 +1,324 @@
+name: Test All Deployment Methods - Orchestrator
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+    inputs:
+      test_scale_count:
+        description: 'Number of instances to test scaling'
+        required: false
+        default: '3'
+        type: string
+
+env:
+  DOCKER_BUILDKIT: 1
+  COMPOSE_DOCKER_CLI_BUILD: 1
+  TEST_SCALE_COUNT: ${{ github.event.inputs.test_scale_count || '3' }}
+
+jobs:
+  # Call Dynamic Docker Method Pipeline
+  test-dynamic-method:
+    uses: ./.github/workflows/test-dynamic-method.yml
+    with:
+      test_scale_count: ${{ inputs.test_scale_count || '3' }}
+
+  # Call Docker Swarm Method Pipeline
+  test-swarm-method:
+    uses: ./.github/workflows/test-swarm-method.yml
+    with:
+      test_scale_count: ${{ inputs.test_scale_count || '3' }}
+
+  # Call Legacy Docker Compose Method Pipeline
+  test-legacy-method:
+    uses: ./.github/workflows/test-legacy-method.yml
+    with:
+      test_scale_count: ${{ inputs.test_scale_count || '3' }}
+
+  # Generate Comprehensive Final Report
+  generate-comprehensive-report:
+    runs-on: ubuntu-latest
+    name: Generate Comprehensive Test Report
+    needs: [test-dynamic-method, test-swarm-method, test-legacy-method]
+    if: always()
+    
+    steps:
+    - name: Download all test results
+      uses: actions/download-artifact@v4
+      with:
+        path: test-results/
+        
+    - name: Install jq for JSON processing
+      run: sudo apt-get update && sudo apt-get install -y jq
+        
+    - name: Generate detailed comprehensive report
+      run: |
+        echo "# 🎮 WoW Docker Player - Comprehensive Test Results" > comprehensive-report.md
+        echo "" >> comprehensive-report.md
+        echo "**Test Date:** $(date -u '+%Y-%m-%d %H:%M:%S UTC')" >> comprehensive-report.md
+        echo "**Test Scale Count:** $TEST_SCALE_COUNT instances" >> comprehensive-report.md
+        echo "**Workflow Run:** #${{ github.run_number }}" >> comprehensive-report.md
+        echo "" >> comprehensive-report.md
+        
+        # Initialize counters
+        total_passed=0
+        total_partial=0
+        total_failed=0
+        total_tests=0
+        
+        # Function to add method results
+        add_method_results() {
+            local method_name="$1"
+            local json_file="$2"
+            local workflow_result="$3"
+            
+            echo "## 🔧 $method_name Results" >> comprehensive-report.md
+            echo "" >> comprehensive-report.md
+            
+            if [ "$workflow_result" == "success" ]; then
+                echo "**Overall Status:** ✅ **PASSED**" >> comprehensive-report.md
+            elif [ "$workflow_result" == "failure" ]; then
+                echo "**Overall Status:** ❌ **FAILED**" >> comprehensive-report.md
+            else
+                echo "**Overall Status:** ⚠️ **CANCELLED/SKIPPED**" >> comprehensive-report.md
+            fi
+            echo "" >> comprehensive-report.md
+            
+            if [ -f "$json_file" ]; then
+                # Parse individual test results
+                echo "### Detailed Test Results:" >> comprehensive-report.md
+                echo "" >> comprehensive-report.md
+                echo "| Test | Status | Details |" >> comprehensive-report.md
+                echo "|------|--------|---------|" >> comprehensive-report.md
+                
+                # Extract and format each test result
+                jq -r 'to_entries[] | "\(.key)|\(.value.result)|\(.value.message)"' "$json_file" | while IFS='|' read -r test_name result message; do
+                    case "$result" in
+                        "PASS") status_icon="✅"; ((total_passed++)) ;;
+                        "PARTIAL") status_icon="⚠️"; ((total_partial++)) ;;
+                        "FAIL") status_icon="❌"; ((total_failed++)) ;;
+                        *) status_icon="❓"; ((total_failed++)) ;;
+                    esac
+                    ((total_tests++))
+                    
+                    # Format test name for readability
+                    formatted_name=$(echo "$test_name" | sed 's/_/ /g' | sed 's/\b\w/\u&/g')
+                    echo "| $formatted_name | $status_icon $result | $message |" >> comprehensive-report.md
+                done
+                
+                # Get summary counts from JSON
+                method_passed=$(jq '[.[] | select(.result == "PASS")] | length' "$json_file")
+                method_partial=$(jq '[.[] | select(.result == "PARTIAL")] | length' "$json_file")
+                method_total=$(jq '. | length' "$json_file")
+                method_failed=$((method_total - method_passed - method_partial))
+                
+                echo "" >> comprehensive-report.md
+                echo "**$method_name Summary:**" >> comprehensive-report.md
+                echo "- ✅ Passed: $method_passed/$method_total" >> comprehensive-report.md
+                echo "- ⚠️ Partial: $method_partial/$method_total" >> comprehensive-report.md
+                echo "- ❌ Failed: $method_failed/$method_total" >> comprehensive-report.md
+                
+                # Calculate success rate
+                if [ $method_total -gt 0 ]; then
+                    success_rate=$(( (method_passed * 100) / method_total ))
+                    echo "- 📊 Success Rate: $success_rate%" >> comprehensive-report.md
+                fi
+                
+                # Update global counters
+                total_passed=$((total_passed + method_passed))
+                total_partial=$((total_partial + method_partial))
+                total_failed=$((total_failed + method_failed))
+                total_tests=$((total_tests + method_total))
+            else
+                echo "❌ **Test results not available** - Workflow may have failed early" >> comprehensive-report.md
+            fi
+            
+            echo "" >> comprehensive-report.md
+            echo "---" >> comprehensive-report.md
+            echo "" >> comprehensive-report.md
+        }
+        
+        # Add results for each method
+        add_method_results "Dynamic Docker Method" "test-results/dynamic-test-results/test_results.json" "${{ needs.test-dynamic-method.result }}"
+        add_method_results "Docker Swarm Method" "test-results/swarm-test-results/test_results.json" "${{ needs.test-swarm-method.result }}"
+        add_method_results "Legacy Docker Compose Method" "test-results/legacy-test-results/test_results.json" "${{ needs.test-legacy-method.result }}"
+        
+        # Generate overall summary
+        echo "# 📊 Overall Test Summary" >> comprehensive-report.md
+        echo "" >> comprehensive-report.md
+        
+        # Calculate overall metrics
+        if [ $total_tests -gt 0 ]; then
+            overall_success_rate=$(( (total_passed * 100) / total_tests ))
+            echo "## Key Metrics:" >> comprehensive-report.md
+            echo "- **Total Tests:** $total_tests" >> comprehensive-report.md
+            echo "- **✅ Passed:** $total_passed ($((total_passed * 100 / total_tests))%)" >> comprehensive-report.md
+            echo "- **⚠️ Partial:** $total_partial ($((total_partial * 100 / total_tests))%)" >> comprehensive-report.md
+            echo "- **❌ Failed:** $total_failed ($((total_failed * 100 / total_tests))%)" >> comprehensive-report.md
+            echo "- **📈 Overall Success Rate:** $overall_success_rate%" >> comprehensive-report.md
+        else
+            echo "- **❌ No test results available**" >> comprehensive-report.md
+        fi
+        
+        echo "" >> comprehensive-report.md
+        
+        # Deployment method comparison
+        echo "## 🏆 Deployment Method Comparison:" >> comprehensive-report.md
+        echo "" >> comprehensive-report.md
+        echo "| Method | Status | Recommended For |" >> comprehensive-report.md
+        echo "|--------|--------|-----------------|" >> comprehensive-report.md
+        
+        dynamic_status="${{ needs.test-dynamic-method.result }}"
+        swarm_status="${{ needs.test-swarm-method.result }}"
+        legacy_status="${{ needs.test-legacy-method.result }}"
+        
+        echo "| Dynamic Docker | $([ "$dynamic_status" == "success" ] && echo "✅ PASSED" || echo "❌ FAILED") | Simple deployments (1-10 instances) |" >> comprehensive-report.md
+        echo "| Docker Swarm | $([ "$swarm_status" == "success" ] && echo "✅ PASSED" || echo "❌ FAILED") | Enterprise/production (10+ instances) |" >> comprehensive-report.md
+        echo "| Legacy Compose | $([ "$legacy_status" == "success" ] && echo "✅ PASSED" || echo "❌ FAILED") | Development/testing environments |" >> comprehensive-report.md
+        
+        echo "" >> comprehensive-report.md
+        
+        # Recommendations based on results
+        echo "## 💡 Recommendations:" >> comprehensive-report.md
+        echo "" >> comprehensive-report.md
+        
+        if [ "$dynamic_status" == "success" ]; then
+            echo "✅ **Dynamic Docker Method** is ready for production use" >> comprehensive-report.md
+        else
+            echo "⚠️ **Dynamic Docker Method** requires attention before production use" >> comprehensive-report.md
+        fi
+        
+        if [ "$swarm_status" == "success" ]; then
+            echo "✅ **Docker Swarm Method** is ready for enterprise deployments" >> comprehensive-report.md
+        else
+            echo "⚠️ **Docker Swarm Method** requires fixes for enterprise use" >> comprehensive-report.md
+        fi
+        
+        if [ "$legacy_status" == "success" ]; then
+            echo "✅ **Legacy Compose Method** is stable for development use" >> comprehensive-report.md
+        else
+            echo "⚠️ **Legacy Compose Method** needs debugging for reliable operation" >> comprehensive-report.md
+        fi
+        
+        echo "" >> comprehensive-report.md
+        echo "## 🔧 Next Steps:" >> comprehensive-report.md
+        echo "" >> comprehensive-report.md
+        
+        if [ $total_failed -gt 0 ]; then
+            echo "- 🚨 **Priority:** Fix $total_failed failing tests" >> comprehensive-report.md
+        fi
+        
+        if [ $total_partial -gt 0 ]; then
+            echo "- ⚠️ **Review:** Investigate $total_partial partially passing tests" >> comprehensive-report.md
+        fi
+        
+        if [ $overall_success_rate -lt 80 ]; then
+            echo "- 📈 **Goal:** Improve overall success rate above 80% (currently $overall_success_rate%)" >> comprehensive-report.md
+        else
+            echo "- ✅ **Good:** Success rate of $overall_success_rate% meets quality standards" >> comprehensive-report.md
+        fi
+        
+        echo "- 📚 **Documentation:** Update README with latest test results" >> comprehensive-report.md
+        echo "- 🔄 **Automation:** Consider adding these tests to CI/CD pipeline" >> comprehensive-report.md
+        
+        echo "" >> comprehensive-report.md
+        echo "---" >> comprehensive-report.md
+        echo "*Automated comprehensive test report generated by GitHub Actions*" >> comprehensive-report.md
+        echo "*Workflow: ${{ github.workflow }} | Run: #${{ github.run_number }} | Commit: ${{ github.sha }}*" >> comprehensive-report.md
+        
+        # Display report summary in workflow log
+        echo "==============================================="
+        echo "COMPREHENSIVE TEST REPORT SUMMARY"
+        echo "==============================================="
+        echo "Total Tests: $total_tests"
+        echo "Passed: $total_passed"
+        echo "Partial: $total_partial" 
+        echo "Failed: $total_failed"
+        [ $total_tests -gt 0 ] && echo "Success Rate: $((total_passed * 100 / total_tests))%"
+        echo "==============================================="
+        
+    - name: Upload comprehensive report
+      uses: actions/upload-artifact@v4
+      with:
+        name: comprehensive-test-report
+        path: comprehensive-report.md
+        retention-days: 30
+        
+    - name: Comment comprehensive report on PR
+      if: github.event_name == 'pull_request'
+      uses: actions/github-script@v7
+      with:
+        script: |
+          const fs = require('fs');
+          const report = fs.readFileSync('comprehensive-report.md', 'utf8');
+          
+          // Truncate report if too long for PR comment
+          let commentBody = report;
+          if (report.length > 65000) {
+            commentBody = report.substring(0, 60000) + '\n\n... (Report truncated. Download full report from artifacts)';
+          }
+          
+          await github.rest.issues.createComment({
+            issue_number: context.issue.number,
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            body: commentBody
+          });
+
+  # Final cleanup ensuring no resources remain
+  final-cleanup:
+    runs-on: ubuntu-latest
+    name: Final Resource Cleanup
+    needs: [test-dynamic-method, test-swarm-method, test-legacy-method]
+    if: always()
+    
+    steps:
+    - name: Aggressive Docker cleanup
+      run: |
+        echo "=== Performing final cleanup ==="
+        
+        # Stop all containers
+        echo "Stopping all containers..."
+        docker stop $(docker ps -aq) 2>/dev/null || true
+        
+        # Remove all containers
+        echo "Removing all containers..."
+        docker rm $(docker ps -aq) 2>/dev/null || true
+        
+        # Remove all volumes
+        echo "Removing all volumes..."
+        docker volume prune -f || true
+        
+        # Remove all networks (except defaults)
+        echo "Removing custom networks..."
+        docker network prune -f || true
+        
+        # Remove all images
+        echo "Removing all images..."
+        docker image prune -a -f || true
+        
+        # System cleanup
+        echo "Final system cleanup..."
+        docker system prune -a -f --volumes || true
+        
+        echo "✅ Final cleanup completed"
+        
+    - name: Report final Docker state
+      run: |
+        echo "=== Final Docker State ==="
+        echo "Containers:"
+        docker ps -a || echo "No containers"
+        echo ""
+        echo "Volumes:"
+        docker volume ls || echo "No volumes"
+        echo ""
+        echo "Networks:"
+        docker network ls || echo "Default networks only"
+        echo ""
+        echo "Images:"
+        docker images || echo "No images"
+        echo ""
+        echo "System overview:"
+        docker system df || echo "System clean"

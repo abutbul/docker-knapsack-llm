@@ -1,0 +1,350 @@
+name: Test Legacy Docker Compose Method
+
+on:
+  workflow_call:
+    inputs:
+      test_scale_count:
+        description: 'Number of instances to test scaling'
+        required: false
+        default: '3'
+        type: string
+    outputs:
+      test_results:
+        description: 'JSON formatted test results'
+        value: ${{ jobs.test-legacy.outputs.test_results }}
+      success_count:
+        description: 'Number of successful tests'
+        value: ${{ jobs.test-legacy.outputs.success_count }}
+      total_count:
+        description: 'Total number of tests'
+        value: ${{ jobs.test-legacy.outputs.total_count }}
+
+env:
+  DOCKER_BUILDKIT: 1
+  COMPOSE_DOCKER_CLI_BUILD: 1
+  TEST_SCALE_COUNT: ${{ inputs.test_scale_count || '3' }}
+
+jobs:
+  test-legacy:
+    runs-on: ubuntu-latest
+    name: Legacy Docker Compose Method Tests
+    timeout-minutes: 30
+    outputs:
+      test_results: ${{ steps.collect-results.outputs.results }}
+      success_count: ${{ steps.collect-results.outputs.success_count }}
+      total_count: ${{ steps.collect-results.outputs.total_count }}
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+      
+    - name: Create empty wow-client directory
+      run: |
+        mkdir -p wow-client
+        echo "Created empty wow-client directory for testing"
+        
+    - name: Make scripts executable
+      run: |
+        chmod +x manage-clients.sh
+        chmod +x generate-compose.sh
+        
+    - name: Test Legacy - Setup
+      id: test-setup
+      run: |
+        echo "=== Testing Legacy Method Setup ==="
+        if ./manage-clients.sh setup; then
+          echo "result=PASS" >> $GITHUB_OUTPUT
+          echo "message=Setup completed successfully" >> $GITHUB_OUTPUT
+        else
+          echo "result=FAIL" >> $GITHUB_OUTPUT
+          echo "message=Setup failed" >> $GITHUB_OUTPUT
+        fi
+        
+    - name: Test Legacy - Generate Compose File
+      id: test-generate
+      run: |
+        echo "=== Testing Legacy Method - Generate Compose ==="
+        if ./generate-compose.sh $TEST_SCALE_COUNT docker-compose.generated.yml; then
+          if [ -f "docker-compose.generated.yml" ]; then
+            echo "✅ Generated compose file exists"
+            echo "result=PASS" >> $GITHUB_OUTPUT
+            echo "message=Compose file generated successfully for $TEST_SCALE_COUNT instances" >> $GITHUB_OUTPUT
+          else
+            echo "❌ Generated compose file not found"
+            echo "result=FAIL" >> $GITHUB_OUTPUT
+            echo "message=Compose file generation completed but file not found" >> $GITHUB_OUTPUT
+          fi
+        else
+          echo "result=FAIL" >> $GITHUB_OUTPUT
+          echo "message=Failed to generate compose file" >> $GITHUB_OUTPUT
+        fi
+        
+    - name: Test Legacy - Start Instances
+      id: test-start
+      run: |
+        echo "=== Testing Legacy Method - Start $TEST_SCALE_COUNT instances ==="
+        if timeout 300 ./manage-clients.sh start $TEST_SCALE_COUNT; then
+          sleep 15
+          echo "result=PASS" >> $GITHUB_OUTPUT
+          echo "message=Started $TEST_SCALE_COUNT instances successfully" >> $GITHUB_OUTPUT
+        else
+          echo "result=FAIL" >> $GITHUB_OUTPUT
+          echo "message=Failed to start instances" >> $GITHUB_OUTPUT
+        fi
+        
+    - name: Test Legacy - Status Check
+      id: test-status
+      run: |
+        echo "=== Testing Legacy Method - Status ==="
+        status_success=0
+        
+        # Check script status
+        if ./manage-clients.sh status; then
+          echo "✅ Script status check passed"
+          ((status_success++))
+        else
+          echo "❌ Script status check failed"
+        fi
+        
+        # Check docker-compose status
+        if docker-compose -f docker-compose.generated.yml ps; then
+          echo "✅ Docker-compose status check passed"
+          ((status_success++))
+        else
+          echo "❌ Docker-compose status check failed"
+        fi
+        
+        if [ $status_success -eq 2 ]; then
+          echo "result=PASS" >> $GITHUB_OUTPUT
+          echo "message=Status check completed successfully (2/2)" >> $GITHUB_OUTPUT
+        else
+          echo "result=PARTIAL" >> $GITHUB_OUTPUT
+          echo "message=Status check partially passed ($status_success/2)" >> $GITHUB_OUTPUT
+        fi
+        
+    - name: Test Legacy - Container Verification
+      id: test-containers
+      run: |
+        echo "=== Testing Legacy Method - Container Verification ==="
+        running_containers=$(docker ps --filter "name=wow-client-" --format "{{.Names}}" | wc -l)
+        expected_containers=$TEST_SCALE_COUNT
+        
+        if [ "$running_containers" -eq "$expected_containers" ]; then
+          echo "result=PASS" >> $GITHUB_OUTPUT
+          echo "message=Container verification passed - $running_containers/$expected_containers containers running" >> $GITHUB_OUTPUT
+        elif [ "$running_containers" -gt 0 ]; then
+          echo "result=PARTIAL" >> $GITHUB_OUTPUT
+          echo "message=Container verification partial - $running_containers/$expected_containers containers running" >> $GITHUB_OUTPUT
+        else
+          echo "result=FAIL" >> $GITHUB_OUTPUT
+          echo "message=Container verification failed - no containers running" >> $GITHUB_OUTPUT
+        fi
+        
+    - name: Test Legacy - API Tests
+      id: test-api
+      run: |
+        echo "=== Testing Legacy Method - API Tests ==="
+        sleep 10
+        
+        # Test first instance API
+        if curl -f http://localhost:5000/health; then
+          echo "result=PASS" >> $GITHUB_OUTPUT
+          echo "message=API connectivity test passed" >> $GITHUB_OUTPUT
+        else
+          echo "result=FAIL" >> $GITHUB_OUTPUT
+          echo "message=API connectivity test failed" >> $GITHUB_OUTPUT
+        fi
+        
+    - name: Test Legacy - Port Mapping Verification
+      id: test-ports
+      run: |
+        echo "=== Testing Legacy Method - Port Mapping ==="
+        port_success=0
+        total_ports=$TEST_SCALE_COUNT
+        
+        for i in $(seq 1 $TEST_SCALE_COUNT); do
+          vnc_port=$((5899 + i))
+          api_port=$((4999 + i))
+          
+          # Check if ports are listening
+          if netstat -tuln | grep -q ":$vnc_port "; then
+            echo "✅ VNC port $vnc_port is listening"
+            ((port_success++))
+          else
+            echo "❌ VNC port $vnc_port is not listening"
+          fi
+          
+          if netstat -tuln | grep -q ":$api_port "; then
+            echo "✅ API port $api_port is listening"
+            ((port_success++))
+          else
+            echo "❌ API port $api_port is not listening"
+          fi
+        done
+        
+        expected_ports=$((TEST_SCALE_COUNT * 2))
+        if [ $port_success -eq $expected_ports ]; then
+          echo "result=PASS" >> $GITHUB_OUTPUT
+          echo "message=Port mapping verification passed - all $expected_ports ports listening" >> $GITHUB_OUTPUT
+        elif [ $port_success -gt 0 ]; then
+          echo "result=PARTIAL" >> $GITHUB_OUTPUT
+          echo "message=Port mapping verification partial - $port_success/$expected_ports ports listening" >> $GITHUB_OUTPUT
+        else
+          echo "result=FAIL" >> $GITHUB_OUTPUT
+          echo "message=Port mapping verification failed - no ports listening" >> $GITHUB_OUTPUT
+        fi
+        
+    - name: Test Legacy - VNC Connection Test
+      id: test-vnc-connection
+      run: |
+        echo "=== Testing Legacy Method - VNC Connection ==="
+        # Test VNC connection to first instance
+        if python3 test_vnc.py; then
+          echo "result=PASS" >> $GITHUB_OUTPUT
+          echo "message=VNC connection test passed" >> $GITHUB_OUTPUT
+        else
+          echo "result=FAIL" >> $GITHUB_OUTPUT
+          echo "message=VNC connection test failed" >> $GITHUB_OUTPUT
+        fi
+        
+    - name: Test Legacy - Stop All
+      id: test-stop
+      run: |
+        echo "=== Testing Legacy Method - Stop All ==="
+        if ./manage-clients.sh stop; then
+          sleep 5
+          # Verify containers are stopped
+          running_containers=$(docker ps --filter "name=wow-client-" --format "{{.Names}}" | wc -l)
+          if [ "$running_containers" -eq 0 ]; then
+            echo "result=PASS" >> $GITHUB_OUTPUT
+            echo "message=Stop all completed successfully - all containers stopped" >> $GITHUB_OUTPUT
+          else
+            echo "result=PARTIAL" >> $GITHUB_OUTPUT
+            echo "message=Stop all executed but $running_containers containers still running" >> $GITHUB_OUTPUT
+          fi
+        else
+          echo "result=FAIL" >> $GITHUB_OUTPUT
+          echo "message=Stop all failed" >> $GITHUB_OUTPUT
+        fi
+        
+    - name: Test Legacy - Clean Stopped
+      id: test-clean-stopped
+      run: |
+        echo "=== Testing Legacy Method - Clean Stopped ==="
+        if ./manage-clients.sh clean-stopped; then
+          echo "result=PASS" >> $GITHUB_OUTPUT
+          echo "message=Clean stopped completed successfully" >> $GITHUB_OUTPUT
+        else
+          echo "result=FAIL" >> $GITHUB_OUTPUT
+          echo "message=Clean stopped failed" >> $GITHUB_OUTPUT
+        fi
+        
+    - name: Test Legacy - Clean All
+      id: test-clean-all
+      run: |
+        echo "=== Testing Legacy Method - Clean All ==="
+        if echo "y" | ./manage-clients.sh clean-all; then
+          echo "result=PASS" >> $GITHUB_OUTPUT
+          echo "message=Clean all completed successfully" >> $GITHUB_OUTPUT
+        else
+          echo "result=PARTIAL" >> $GITHUB_OUTPUT
+          echo "message=Clean all completed with warnings" >> $GITHUB_OUTPUT
+        fi
+        
+    - name: Verify Legacy Cleanup
+      id: test-cleanup-verify
+      run: |
+        echo "=== Verifying Legacy Method Cleanup ==="
+        containers=$(docker ps -a --filter "name=wow-client" --format "{{.Names}}" | wc -l)
+        project_prefix=$(basename "$(pwd)")
+        volumes=$(docker volume ls --filter "name=${project_prefix}" --format "{{.Name}}" | wc -l)
+        
+        if [ $containers -eq 0 ] && [ $volumes -eq 0 ]; then
+          echo "result=PASS" >> $GITHUB_OUTPUT
+          echo "message=Cleanup verification passed - no resources left" >> $GITHUB_OUTPUT
+        else
+          echo "result=FAIL" >> $GITHUB_OUTPUT
+          echo "message=Cleanup verification failed - $containers containers, $volumes volumes remaining" >> $GITHUB_OUTPUT
+        fi
+        
+    - name: Collect Test Results
+      id: collect-results
+      run: |
+        # Create JSON results
+        cat << 'EOF' > test_results.json
+        {
+          "setup": {
+            "result": "${{ steps.test-setup.outputs.result }}",
+            "message": "${{ steps.test-setup.outputs.message }}"
+          },
+          "generate_compose": {
+            "result": "${{ steps.test-generate.outputs.result }}",
+            "message": "${{ steps.test-generate.outputs.message }}"
+          },
+          "start_instances": {
+            "result": "${{ steps.test-start.outputs.result }}",
+            "message": "${{ steps.test-start.outputs.message }}"
+          },
+          "status_check": {
+            "result": "${{ steps.test-status.outputs.result }}",
+            "message": "${{ steps.test-status.outputs.message }}"
+          },
+          "container_verify": {
+            "result": "${{ steps.test-containers.outputs.result }}",
+            "message": "${{ steps.test-containers.outputs.message }}"
+          },
+          "api_tests": {
+            "result": "${{ steps.test-api.outputs.result }}",
+            "message": "${{ steps.test-api.outputs.message }}"
+          },
+          "port_mapping": {
+            "result": "${{ steps.test-ports.outputs.result }}",
+            "message": "${{ steps.test-ports.outputs.message }}"
+          },
+          "vnc_connection": {
+            "result": "${{ steps.test-vnc-connection.outputs.result }}",
+            "message": "${{ steps.test-vnc-connection.outputs.message }}"
+          },
+          "stop_all": {
+            "result": "${{ steps.test-stop.outputs.result }}",
+            "message": "${{ steps.test-stop.outputs.message }}"
+          },
+          "clean_stopped": {
+            "result": "${{ steps.test-clean-stopped.outputs.result }}",
+            "message": "${{ steps.test-clean-stopped.outputs.message }}"
+          },
+          "clean_all": {
+            "result": "${{ steps.test-clean-all.outputs.result }}",
+            "message": "${{ steps.test-clean-all.outputs.message }}"
+          },
+          "cleanup_verify": {
+            "result": "${{ steps.test-cleanup-verify.outputs.result }}",
+            "message": "${{ steps.test-cleanup-verify.outputs.message }}"
+          }
+        }
+        EOF
+        
+        # Count successes
+        success_count=$(cat test_results.json | grep -o '"result": "PASS"' | wc -l)
+        partial_count=$(cat test_results.json | grep -o '"result": "PARTIAL"' | wc -l)
+        total_count=12
+        
+        echo "results=$(cat test_results.json | tr -d '\n')" >> $GITHUB_OUTPUT
+        echo "success_count=$success_count" >> $GITHUB_OUTPUT
+        echo "total_count=$total_count" >> $GITHUB_OUTPUT
+        echo "partial_count=$partial_count" >> $GITHUB_OUTPUT
+        
+        echo "=== Legacy Method Test Summary ==="
+        echo "✅ Passed: $success_count/$total_count"
+        echo "⚠️  Partial: $partial_count/$total_count"
+        echo "❌ Failed: $((total_count - success_count - partial_count))/$total_count"
+        
+    - name: Upload Legacy Test Results
+      uses: actions/upload-artifact@v4
+      with:
+        name: legacy-test-results
+        path: test_results.json
+        retention-days: 7

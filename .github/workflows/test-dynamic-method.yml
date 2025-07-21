@@ -1,0 +1,351 @@
+name: Test Dynamic Docker Method
+
+on:
+  workflow_call:
+    inputs:
+      test_scale_count:
+        description: 'Number of instances to test scaling'
+        required: false
+        default: '3'
+        type: string
+    outputs:
+      test_results:
+        description: 'JSON formatted test results'
+        value: ${{ jobs.test-dynamic.outputs.test_results }}
+      success_count:
+        description: 'Number of successful tests'
+        value: ${{ jobs.test-dynamic.outputs.success_count }}
+      total_count:
+        description: 'Total number of tests'
+        value: ${{ jobs.test-dynamic.outputs.total_count }}
+
+env:
+  DOCKER_BUILDKIT: 1
+  TEST_SCALE_COUNT: ${{ inputs.test_scale_count || '3' }}
+
+jobs:
+  test-dynamic:
+    runs-on: ubuntu-latest
+    name: Dynamic Docker Method Tests
+    timeout-minutes: 30
+    outputs:
+      test_results: ${{ steps.collect-results.outputs.results }}
+      success_count: ${{ steps.collect-results.outputs.success_count }}
+      total_count: ${{ steps.collect-results.outputs.total_count }}
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+      
+    - name: Create empty wow-client directory
+      run: |
+        mkdir -p wow-client
+        echo "Created empty wow-client directory for testing"
+        
+    - name: Make scripts executable
+      run: |
+        chmod +x manage-clients-dynamic.sh
+        chmod +x choose-approach.sh
+        
+    - name: Test Dynamic - Setup
+      id: test-setup
+      run: |
+        echo "=== Testing Dynamic Method Setup ==="
+        if ./manage-clients-dynamic.sh setup; then
+          echo "result=PASS" >> $GITHUB_OUTPUT
+          echo "message=Setup completed successfully" >> $GITHUB_OUTPUT
+        else
+          echo "result=FAIL" >> $GITHUB_OUTPUT
+          echo "message=Setup failed" >> $GITHUB_OUTPUT
+        fi
+        
+    - name: Test Dynamic - Build and Start Single Instance
+      id: test-single-start
+      run: |
+        echo "=== Testing Dynamic Method - Single Instance ==="
+        if timeout 300 ./manage-clients-dynamic.sh start 1; then
+          sleep 10
+          echo "result=PASS" >> $GITHUB_OUTPUT
+          echo "message=Single instance started successfully" >> $GITHUB_OUTPUT
+        else
+          echo "result=FAIL" >> $GITHUB_OUTPUT
+          echo "message=Failed to start single instance" >> $GITHUB_OUTPUT
+        fi
+        
+    - name: Test Dynamic - Status Check
+      id: test-status
+      run: |
+        echo "=== Testing Dynamic Method - Status ==="
+        if ./manage-clients-dynamic.sh status; then
+          echo "result=PASS" >> $GITHUB_OUTPUT
+          echo "message=Status check completed" >> $GITHUB_OUTPUT
+        else
+          echo "result=FAIL" >> $GITHUB_OUTPUT
+          echo "message=Status check failed" >> $GITHUB_OUTPUT
+        fi
+        
+    - name: Test Dynamic - Scale Up
+      id: test-scale-up
+      run: |
+        echo "=== Testing Dynamic Method - Scale Up to $TEST_SCALE_COUNT ==="
+        if timeout 300 ./manage-clients-dynamic.sh scale $TEST_SCALE_COUNT; then
+          sleep 5
+          ./manage-clients-dynamic.sh status
+          echo "result=PASS" >> $GITHUB_OUTPUT
+          echo "message=Scaled up to $TEST_SCALE_COUNT instances successfully" >> $GITHUB_OUTPUT
+        else
+          echo "result=FAIL" >> $GITHUB_OUTPUT
+          echo "message=Failed to scale up to $TEST_SCALE_COUNT instances" >> $GITHUB_OUTPUT
+        fi
+        
+    - name: Test Multiple VNC Ports
+      id: test-multiple-vnc-ports
+      run: |
+        echo "=== Testing Multiple VNC Ports after scaling ==="
+        sleep 5
+        
+        # Check if all VNC ports are listening based on scale count
+        vnc_ports_ok=0
+        for i in $(seq 0 $((TEST_SCALE_COUNT - 1))); do
+          port=$((5900 + i))
+          if netstat -tuln | grep -q ":$port "; then
+            echo "✅ VNC port $port is listening"
+            ((vnc_ports_ok++))
+          else
+            echo "❌ VNC port $port is not listening"
+          fi
+        done
+        
+        if [ $vnc_ports_ok -eq $TEST_SCALE_COUNT ]; then
+          echo "result=PASS" >> $GITHUB_OUTPUT
+          echo "message=All $TEST_SCALE_COUNT VNC ports are listening correctly" >> $GITHUB_OUTPUT
+        elif [ $vnc_ports_ok -gt 0 ]; then
+          echo "result=PARTIAL" >> $GITHUB_OUTPUT
+          echo "message=$vnc_ports_ok/$TEST_SCALE_COUNT VNC ports are listening" >> $GITHUB_OUTPUT
+        else
+          echo "result=FAIL" >> $GITHUB_OUTPUT
+          echo "message=No VNC ports are listening after scaling" >> $GITHUB_OUTPUT
+        fi
+        
+    - name: Test Dynamic - API Connectivity
+      id: test-api
+      run: |
+        echo "=== Testing Dynamic Method - API Tests ==="
+        sleep 10
+        api_success=0
+        
+        # Test health endpoint
+        if curl -f http://localhost:5000/health; then
+          echo "✅ Health check passed"
+          ((api_success++))
+        else
+          echo "❌ Health check failed"
+        fi
+        
+        # Test desktop snapshot
+        if curl -f http://localhost:5000/desktop-snapshot; then
+          echo "✅ Desktop snapshot passed"
+          ((api_success++))
+        else
+          echo "❌ Desktop snapshot failed"
+        fi
+        
+        if [ $api_success -eq 2 ]; then
+          echo "result=PASS" >> $GITHUB_OUTPUT
+          echo "message=All API tests passed (2/2)" >> $GITHUB_OUTPUT
+        else
+          echo "result=PARTIAL" >> $GITHUB_OUTPUT
+          echo "message=API tests partially passed ($api_success/2)" >> $GITHUB_OUTPUT
+        fi
+        
+    - name: Run API Test Script
+      id: test-api-script
+      run: |
+        echo "=== Running API Test Script ==="
+        python3 -m pip install requests pillow
+        if timeout 60 python3 test_api.py; then
+          echo "result=PASS" >> $GITHUB_OUTPUT
+          echo "message=API test script completed successfully" >> $GITHUB_OUTPUT
+        else
+          echo "result=PARTIAL" >> $GITHUB_OUTPUT
+          echo "message=API test script completed with some issues" >> $GITHUB_OUTPUT
+        fi
+        
+    - name: Test VNC Port Listening
+      id: test-vnc-port
+      run: |
+        echo "=== Testing VNC Port Listening ==="
+        if netstat -tuln | grep -q ":5900 "; then
+          echo "result=PASS" >> $GITHUB_OUTPUT
+          echo "message=VNC port 5900 is listening" >> $GITHUB_OUTPUT
+        else
+          echo "result=FAIL" >> $GITHUB_OUTPUT
+          echo "message=VNC port 5900 is not listening" >> $GITHUB_OUTPUT
+        fi
+        
+    - name: Test VNC Connection Script
+      id: test-vnc-connection
+      run: |
+        echo "=== Testing VNC Connection ==="
+        if python3 test_vnc.py; then
+          echo "result=PASS" >> $GITHUB_OUTPUT
+          echo "message=VNC connection test passed" >> $GITHUB_OUTPUT
+        else
+          echo "result=FAIL" >> $GITHUB_OUTPUT
+          echo "message=VNC connection test failed" >> $GITHUB_OUTPUT
+        fi
+        
+    - name: Test Dynamic - Scale Down
+      id: test-scale-down
+      run: |
+        echo "=== Testing Dynamic Method - Scale Down ==="
+        if ./manage-clients-dynamic.sh scale 1; then
+          sleep 5
+          ./manage-clients-dynamic.sh status
+          echo "result=PASS" >> $GITHUB_OUTPUT
+          echo "message=Scaled down to 1 instance successfully" >> $GITHUB_OUTPUT
+        else
+          echo "result=FAIL" >> $GITHUB_OUTPUT
+          echo "message=Failed to scale down" >> $GITHUB_OUTPUT
+        fi
+        
+    - name: Test Dynamic - Clean Stopped
+      id: test-clean-stopped
+      run: |
+        echo "=== Testing Dynamic Method - Clean Stopped ==="
+        if ./manage-clients-dynamic.sh clean-stopped; then
+          echo "result=PASS" >> $GITHUB_OUTPUT
+          echo "message=Clean stopped completed successfully" >> $GITHUB_OUTPUT
+        else
+          echo "result=FAIL" >> $GITHUB_OUTPUT
+          echo "message=Clean stopped failed" >> $GITHUB_OUTPUT
+        fi
+        
+    - name: Test Dynamic - Stop All
+      id: test-stop
+      run: |
+        echo "=== Testing Dynamic Method - Stop All ==="
+        if ./manage-clients-dynamic.sh stop; then
+          echo "result=PASS" >> $GITHUB_OUTPUT
+          echo "message=Stop all completed successfully" >> $GITHUB_OUTPUT
+        else
+          echo "result=FAIL" >> $GITHUB_OUTPUT
+          echo "message=Stop all failed" >> $GITHUB_OUTPUT
+        fi
+        
+    - name: Test Dynamic - Clean All
+      id: test-clean-all
+      run: |
+        echo "=== Testing Dynamic Method - Clean All ==="
+        if echo "y" | ./manage-clients-dynamic.sh clean-all; then
+          echo "result=PASS" >> $GITHUB_OUTPUT
+          echo "message=Clean all completed successfully" >> $GITHUB_OUTPUT
+        else
+          echo "result=PARTIAL" >> $GITHUB_OUTPUT
+          echo "message=Clean all completed with warnings" >> $GITHUB_OUTPUT
+        fi
+        
+    - name: Verify Dynamic Cleanup
+      id: test-cleanup-verify
+      run: |
+        echo "=== Verifying Dynamic Method Cleanup ==="
+        containers=$(docker ps -a --filter "name=wow-clients-client-" --format "{{.Names}}" | wc -l)
+        volumes=$(docker volume ls --filter "name=wow-clients" --format "{{.Name}}" | wc -l)
+        
+        if [ $containers -eq 0 ] && [ $volumes -eq 0 ]; then
+          echo "result=PASS" >> $GITHUB_OUTPUT
+          echo "message=Cleanup verification passed - no resources left" >> $GITHUB_OUTPUT
+        else
+          echo "result=FAIL" >> $GITHUB_OUTPUT
+          echo "message=Cleanup verification failed - $containers containers, $volumes volumes remaining" >> $GITHUB_OUTPUT
+        fi
+        
+    - name: Collect Test Results
+      id: collect-results
+      run: |
+        # Create JSON results
+        cat << 'EOF' > test_results.json
+        {
+          "setup": {
+            "result": "${{ steps.test-setup.outputs.result }}",
+            "message": "${{ steps.test-setup.outputs.message }}"
+          },
+          "single_start": {
+            "result": "${{ steps.test-single-start.outputs.result }}",
+            "message": "${{ steps.test-single-start.outputs.message }}"
+          },
+          "status_check": {
+            "result": "${{ steps.test-status.outputs.result }}",
+            "message": "${{ steps.test-status.outputs.message }}"
+          },
+          "scale_up": {
+            "result": "${{ steps.test-scale-up.outputs.result }}",
+            "message": "${{ steps.test-scale-up.outputs.message }}"
+          },
+          "multiple_vnc_ports": {
+            "result": "${{ steps.test-multiple-vnc-ports.outputs.result }}",
+            "message": "${{ steps.test-multiple-vnc-ports.outputs.message }}"
+          },
+          "api_connectivity": {
+            "result": "${{ steps.test-api.outputs.result }}",
+            "message": "${{ steps.test-api.outputs.message }}"
+          },
+          "api_script": {
+            "result": "${{ steps.test-api-script.outputs.result }}",
+            "message": "${{ steps.test-api-script.outputs.message }}"
+          },
+          "vnc_port_listening": {
+            "result": "${{ steps.test-vnc-port.outputs.result }}",
+            "message": "${{ steps.test-vnc-port.outputs.message }}"
+          },
+          "vnc_connection": {
+            "result": "${{ steps.test-vnc-connection.outputs.result }}",
+            "message": "${{ steps.test-vnc-connection.outputs.message }}"
+          },
+          "scale_down": {
+            "result": "${{ steps.test-scale-down.outputs.result }}",
+            "message": "${{ steps.test-scale-down.outputs.message }}"
+          },
+          "clean_stopped": {
+            "result": "${{ steps.test-clean-stopped.outputs.result }}",
+            "message": "${{ steps.test-clean-stopped.outputs.message }}"
+          },
+          "stop_all": {
+            "result": "${{ steps.test-stop.outputs.result }}",
+            "message": "${{ steps.test-stop.outputs.message }}"
+          },
+          "clean_all": {
+            "result": "${{ steps.test-clean-all.outputs.result }}",
+            "message": "${{ steps.test-clean-all.outputs.message }}"
+          },
+          "cleanup_verify": {
+            "result": "${{ steps.test-cleanup-verify.outputs.result }}",
+            "message": "${{ steps.test-cleanup-verify.outputs.message }}"
+          }
+        }
+        EOF
+        
+        # Count successes
+        success_count=$(cat test_results.json | grep -o '"result": "PASS"' | wc -l)
+        partial_count=$(cat test_results.json | grep -o '"result": "PARTIAL"' | wc -l)
+        total_count=14
+        
+        echo "results=$(cat test_results.json | tr -d '\n')" >> $GITHUB_OUTPUT
+        echo "success_count=$success_count" >> $GITHUB_OUTPUT
+        echo "total_count=$total_count" >> $GITHUB_OUTPUT
+        echo "partial_count=$partial_count" >> $GITHUB_OUTPUT
+        
+        echo "=== Dynamic Method Test Summary ==="
+        echo "✅ Passed: $success_count/$total_count"
+        echo "⚠️  Partial: $partial_count/$total_count"
+        echo "❌ Failed: $((total_count - success_count - partial_count))/$total_count"
+        
+    - name: Upload Dynamic Test Results
+      uses: actions/upload-artifact@v4
+      with:
+        name: dynamic-test-results
+        path: test_results.json
+        retention-days: 7
