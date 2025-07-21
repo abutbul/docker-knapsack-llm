@@ -179,7 +179,7 @@ jobs:
         # Test health endpoint with retry
         echo "Testing health endpoint..."
         for attempt in {1..10}; do
-          if curl -f http://localhost:5000/snapshot-info; then
+          if curl -f http://localhost:5000/snapshot-info -s > /dev/null; then
             echo "✅ Health check passed on attempt $attempt"
             ((api_success++))
             break
