@@ -44,6 +44,42 @@ cp -r /path/to/your/wow/client/* ./wow-client/
 **Need help with volumes or cleanup?** → [Volume Cleanup Guide](VOLUME-CLEANUP-GUIDE.md)  
 **Want advanced scaling?** → [Dynamic Orchestration Guide](README-dynamic.md)
 
+## 🧠 AI Research & Emergent Behavior Studies
+
+This platform is specifically designed for studying **emergent behaviors of LLMs in complex human-designed environments**:
+
+### Current Research Focus:
+- **Game World Interactions**: How do LLMs navigate and understand virtual worlds?
+- **Social Dynamics**: Multi-agent interactions in shared game environments
+- **Learning Patterns**: Adaptation and skill development in AI agents
+- **Decision Making**: Analysis of AI choices in complex scenarios
+
+### Planned Research Enhancements Roadmap:
+
+#### Advanced Telemetry
+```bash
+# Future telemetry capabilities
+GET /agent-metrics           # Decision frequency, action patterns
+GET /behavioral-log          # Detailed action history with context
+GET /performance-stats       # Response times, error rates
+```
+
+#### Sandboxing & Safety:
+```bash
+# Enhanced containment for rogue model behavior
+ENABLE_NETWORK_ISOLATION=true    # Block external network access
+ENABLE_RESOURCE_LIMITS=true      # CPU/memory constraints
+ENABLE_ACTION_FILTERING=true     # Whitelist/blacklist actions
+ENABLE_BEHAVIORAL_BOUNDS=true    # Detect anomalous behavior
+```
+
+#### 📊 Research Data Collection:
+- **Action Sequences**: Every mouse/keyboard action with timestamps
+- **Visual Attention**: Eye-tracking equivalent for AI visual processing
+- **Decision Context**: Screenshot + action pairs for training data
+- **Performance Metrics**: Success rates, task completion times
+- **Emergent Patterns**: Unexpected behaviors and strategies
+
 ## 🎮 Key Features
 
 - **Shared Client Files**: Single copy of WoW client shared across all instances using overlay filesystem
