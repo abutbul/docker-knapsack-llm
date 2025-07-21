@@ -186,7 +186,10 @@ function scale_instances() {
     
     # Get currently running instances
     local running_containers=$(docker ps -q -f name="${PROJECT_NAME}-client-")
-    local current_count=$(echo "$running_containers" | grep -c . || echo 0)
+    local current_count=0
+    if [ -n "$running_containers" ]; then
+        current_count=$(echo "$running_containers" | wc -l)
+    fi
     
     echo "Current instances: $current_count, Target: $target_instances"
     
@@ -243,12 +246,15 @@ function scale_instances() {
         # Need to stop some instances
         echo "Stopping excess instances (keeping first $target_instances)..."
         
-        for i in $(seq $((target_instances + 1)) $current_count); do
-            local container_name="${PROJECT_NAME}-client-$i"
-            echo "  Stopping Instance $i"
-            docker stop "$container_name" 2>/dev/null || true
-            docker rm "$container_name" 2>/dev/null || true
-        done
+        # Only run seq if we have valid numbers and current_count > target_instances
+        if [ "$current_count" -gt "$target_instances" ]; then
+            for i in $(seq $((target_instances + 1)) $current_count); do
+                local container_name="${PROJECT_NAME}-client-$i"
+                echo "  Stopping Instance $i"
+                docker stop "$container_name" 2>/dev/null || true
+                docker rm "$container_name" 2>/dev/null || true
+            done
+        fi
     fi
     
     echo "Scaling complete!"
