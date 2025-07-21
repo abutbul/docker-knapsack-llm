@@ -175,13 +175,23 @@ jobs:
         echo "Waiting for API services to be ready..."
         sleep 20
         api_success=0
+        set -x  # Enable debug mode to show commands being executed
+        
+        # Debug container status
+        echo "DEBUG: Container status before health check:"
+        docker ps
         
         # Test health endpoint with retry
         echo "Testing health endpoint..."
         for attempt in {1..10}; do
-          if curl -f http://localhost:5000/snapshot-info -s > /dev/null; then
+          echo "DEBUG: Attempting health check $attempt"
+          health_status=$(curl -f -s -w "%{http_code}" http://localhost:5000/snapshot-info -o /dev/null || echo "failed")
+          echo "DEBUG: Health check status code: $health_status"
+          
+          if [[ "$health_status" == "200" ]]; then
             echo "✅ Health check passed on attempt $attempt"
             ((api_success++))
+            echo "DEBUG: api_success value is now $api_success"
             break
           else
             echo "⏳ Health check attempt $attempt failed, retrying..."
@@ -196,27 +206,41 @@ jobs:
         
         # Test desktop snapshot with retry
         echo "Testing desktop snapshot..."
+        echo "DEBUG: Starting desktop snapshot test"
         for attempt in {1..5}; do
-          if curl -f http://localhost:5000/desktop-snapshot -o /dev/null; then
+          echo "DEBUG: Attempting desktop snapshot $attempt"
+          snapshot_status=$(curl -f -s -w "%{http_code}" http://localhost:5000/desktop-snapshot -o /dev/null || echo "failed")
+          echo "DEBUG: Snapshot status code: $snapshot_status"
+          
+          if [[ "$snapshot_status" == "200" ]]; then
             echo "✅ Desktop snapshot passed on attempt $attempt"
             ((api_success++))
+            echo "DEBUG: api_success value is now $api_success"
             break
           else
             echo "⏳ Desktop snapshot attempt $attempt failed, retrying..."
             if [ $attempt -eq 5 ]; then
               echo "❌ Desktop snapshot failed after 5 attempts"
+              echo "DEBUG: Container status after desktop snapshot failure:"
+              docker ps
+              echo "DEBUG: Checking container logs for API issues:"
+              docker logs --tail 20 wow-clients-client-1 2>&1 || echo "No logs available"
             fi
             sleep 5
           fi
         done
         
+        echo "DEBUG: Final api_success value: $api_success"
         if [ $api_success -eq 2 ]; then
+          echo "DEBUG: All tests passed, setting output to PASS"
           echo "result=PASS" >> $GITHUB_OUTPUT
           echo "message=All API tests passed (2/2)" >> $GITHUB_OUTPUT
         else
+          echo "DEBUG: Some tests failed, setting output to PARTIAL"
           echo "result=PARTIAL" >> $GITHUB_OUTPUT
           echo "message=API tests partially passed ($api_success/2)" >> $GITHUB_OUTPUT
         fi
+        set +x  # Disable debug mode
         
     - name: Run API Test Script
       id: test-api-script
