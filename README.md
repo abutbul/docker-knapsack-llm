@@ -1,6 +1,9 @@
-# Computer use Docker Player (LLM Research)
+# Docker knapsack for LLMs
+Computer use Docker Player (LLM Research)
 
-A containerized World of Warcraft: Wrath of the Lich King client environment with Lutris, Wine, and automation API support. This project enables running single or multiple WoW instances in isolated Docker containers with shared client files and individual configurations.
+A containerized environment with Lutris, Wine, and automation API support. This project enables running single or multiple instances in isolated Docker containers with shared client files and individual configurations via Overlay.
+
+This is currently suited for World of Warcraft: Wrath of the Lich King client but can easily be adjusted for other games or applications requiring the same stack.
 
 ## 📋 Table of Contents
 
